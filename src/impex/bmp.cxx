@@ -32,9 +32,6 @@
 /*    OTHER DEALINGS IN THE SOFTWARE.                                   */
 /*                                                                      */
 /************************************************************************/
-namespace std { class type_info; }
-#include <typeinfo>
-
 #include <iostream>
 #include <fstream>
 #include "vigra/config.hxx"
