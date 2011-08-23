@@ -102,14 +102,14 @@ namespace vigra {
         return desc;
     }
 
-    std::shared_ptr<Decoder> PnmCodecFactory::getDecoder() const
+    std::unique_ptr<Decoder> PnmCodecFactory::getDecoder() const
     {
-        return std::shared_ptr<Decoder>( new PnmDecoder() );
+        return std::unique_ptr<Decoder>( new PnmDecoder() );
     }
 
-    std::shared_ptr<Encoder> PnmCodecFactory::getEncoder() const
+    std::unique_ptr<Encoder> PnmCodecFactory::getEncoder() const
     {
-        return std::shared_ptr<Encoder>( new PnmEncoder() );
+        return std::unique_ptr<Encoder>( new PnmEncoder() );
     }
 
     struct PnmDecoderImpl

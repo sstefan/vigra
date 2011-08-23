@@ -83,14 +83,14 @@ namespace vigra {
         return desc;
     }
 
-    std::shared_ptr<Decoder> HDRCodecFactory::getDecoder() const
+    std::unique_ptr<Decoder> HDRCodecFactory::getDecoder() const
     {
-        return std::shared_ptr<Decoder>( new HDRDecoder() );
+        return std::unique_ptr<Decoder>( new HDRDecoder() );
     }
 
-    std::shared_ptr<Encoder> HDRCodecFactory::getEncoder() const
+    std::unique_ptr<Encoder> HDRCodecFactory::getEncoder() const
     {
-        return std::shared_ptr<Encoder>( new HDREncoder() );
+        return std::unique_ptr<Encoder>( new HDREncoder() );
     }
 
     class HDRCodecImpl

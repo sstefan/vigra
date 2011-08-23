@@ -472,20 +472,16 @@ ImageExportInfo & ImageExportInfo::setICCProfile(
 }
 
 // return an encoder for a given ImageExportInfo object
-std::shared_ptr<Encoder> encoder( const ImageExportInfo & info )
+std::unique_ptr<Encoder> encoder( const ImageExportInfo & info )
 {
-    std::shared_ptr<Encoder> enc;
+    std::unique_ptr<Encoder> enc;
 
     std::string filetype = info.getFileType();
     if ( filetype != "" ) {
         validate_filetype(filetype);
-        std::shared_ptr<Encoder> enc2
-            = getEncoder( std::string( info.getFileName() ), filetype, std::string( info.getMode() ) );
-        enc = enc2;
+        enc = getEncoder( std::string( info.getFileName() ), filetype, std::string( info.getMode() ) );
     } else {
-        std::shared_ptr<Encoder> enc2
-            = getEncoder( std::string( info.getFileName() ), "undefined", std::string( info.getMode() ) );
-        enc = enc2;
+	enc = getEncoder( std::string( info.getFileName() ), "undefined", std::string( info.getMode() ) );
     }
 
     std::string comp = info.getCompression();
@@ -680,7 +676,7 @@ const ImageImportInfo::ICCProfile & ImageImportInfo::getICCProfile() const
 
 void ImageImportInfo::readHeader_()
 {
-    std::shared_ptr<Decoder> decoder = getDecoder(m_filename, "undefined", m_image_index);
+    std::unique_ptr<Decoder> decoder = getDecoder(m_filename, "undefined", m_image_index);
     m_num_images = decoder->getNumImages();
 
     m_filetype = decoder->getFileType();
@@ -700,7 +696,7 @@ void ImageImportInfo::readHeader_()
 }
 
 // return a decoder for a given ImageImportInfo object
-std::shared_ptr<Decoder> decoder( const ImageImportInfo & info )
+std::unique_ptr<Decoder> decoder( const ImageImportInfo & info )
 {
     std::string filetype = info.getFileType();
     validate_filetype(filetype);

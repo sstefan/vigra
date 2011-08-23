@@ -44,8 +44,8 @@ namespace vigra {
     struct JPEGCodecFactory : public CodecFactory
     {
         CodecDesc getCodecDesc() const;
-        std::shared_ptr<Decoder> getDecoder() const;
-        std::shared_ptr<Encoder> getEncoder() const;
+        std::unique_ptr<Decoder> getDecoder() const;
+        std::unique_ptr<Encoder> getEncoder() const;
     };
 
     struct JPEGDecoderImpl;

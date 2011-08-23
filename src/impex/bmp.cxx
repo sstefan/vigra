@@ -80,14 +80,14 @@ CodecDesc BmpCodecFactory::getCodecDesc() const
     return desc;
 }
 
-std::shared_ptr<Decoder> BmpCodecFactory::getDecoder() const
+std::unique_ptr<Decoder> BmpCodecFactory::getDecoder() const
 {
-    return std::shared_ptr<Decoder>( new BmpDecoder() );
+    return std::unique_ptr<Decoder>( new BmpDecoder() );
 }
 
-std::shared_ptr<Encoder> BmpCodecFactory::getEncoder() const
+std::unique_ptr<Encoder> BmpCodecFactory::getEncoder() const
 {
-    return std::shared_ptr<Encoder>( new BmpEncoder() );
+    return std::unique_ptr<Encoder>( new BmpEncoder() );
 }
 
 struct BmpFileHeader

@@ -92,14 +92,14 @@ namespace vigra {
         return desc;
     }
 
-    std::shared_ptr<Decoder> SunCodecFactory::getDecoder() const
+    std::unique_ptr<Decoder> SunCodecFactory::getDecoder() const
     {
-        return std::shared_ptr<Decoder>( new SunDecoder() );
+        return std::unique_ptr<Decoder>( new SunDecoder() );
     }
 
-    std::shared_ptr<Encoder> SunCodecFactory::getEncoder() const
+    std::unique_ptr<Encoder> SunCodecFactory::getEncoder() const
     {
-        return std::shared_ptr<Encoder>( new SunEncoder() );
+        return std::unique_ptr<Encoder>( new SunEncoder() );
     }
 
     struct SunHeader

@@ -113,14 +113,14 @@ namespace vigra
         return desc;
     }
 
-    std::shared_ptr<Decoder> JPEGCodecFactory::getDecoder() const
+    std::unique_ptr<Decoder> JPEGCodecFactory::getDecoder() const
     {
-        return std::shared_ptr<Decoder>( new JPEGDecoder() );
+        return std::unique_ptr<Decoder>( new JPEGDecoder() );
     }
 
-    std::shared_ptr<Encoder> JPEGCodecFactory::getEncoder() const
+    std::unique_ptr<Encoder> JPEGCodecFactory::getEncoder() const
     {
-        return std::shared_ptr<Encoder>( new JPEGEncoder() );
+        return std::unique_ptr<Encoder>( new JPEGEncoder() );
     }
 
     class JPEGCodecImpl

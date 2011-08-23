@@ -220,7 +220,7 @@ namespace vigra
     }
 
     // look up decoder from the list, then return it
-    std::shared_ptr<Decoder>
+    std::unique_ptr<Decoder>
     CodecManager::getDecoder( const std::string & filename,
                               const std::string & filetype,
                               unsigned int imageindex ) const
@@ -247,7 +247,7 @@ namespace vigra
         "did not find a matching codec for the given filetype" );
 
         // okay, we can return a decoder
-        std::shared_ptr<Decoder> dec = search->second->getDecoder();
+        std::unique_ptr<Decoder> dec = search->second->getDecoder();
         dec->init(filename, imageindex);
         return dec;
     }
@@ -277,7 +277,7 @@ namespace vigra
     }
 
     // look up encoder from the list, then return it
-    std::shared_ptr<Encoder>
+    std::unique_ptr<Encoder>
     CodecManager::getEncoder( const std::string & filename,
                               const std::string & fType,
                               const std::string & mode ) const
@@ -291,13 +291,13 @@ namespace vigra
         "did not find a matching codec for the given filetype" );
 
         // okay, we can return an encoder
-        std::shared_ptr<Encoder> enc = search->second->getEncoder();
+        std::unique_ptr<Encoder> enc = search->second->getEncoder();
         enc->init(filename, mode);
         return enc;
     }
 
     // get a decoder
-    std::shared_ptr<Decoder>
+    std::unique_ptr<Decoder>
     getDecoder( const std::string & filename, const std::string & filetype, unsigned int imageindex )
     {
         return codecManager().getDecoder( filename, filetype, imageindex );
@@ -311,7 +311,7 @@ namespace vigra
     }
 
     // get an encoder
-    std::shared_ptr<Encoder>
+    std::unique_ptr<Encoder>
     getEncoder( const std::string & filename, const std::string & filetype, const std::string & mode )
     {
         return codecManager().getEncoder( filename, filetype, mode );
