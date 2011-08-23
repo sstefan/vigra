@@ -282,14 +282,14 @@ namespace {
         return desc;
     }
 
-    std::auto_ptr<Decoder> GIFCodecFactory::getDecoder() const
+    std::shared_ptr<Decoder> GIFCodecFactory::getDecoder() const
     {
-        return std::auto_ptr<Decoder>( new GIFDecoder() );
+        return std::shared_ptr<Decoder>( new GIFDecoder() );
     }
 
-    std::auto_ptr<Encoder> GIFCodecFactory::getEncoder() const
+    std::shared_ptr<Encoder> GIFCodecFactory::getEncoder() const
     {
-        return std::auto_ptr<Encoder>( new GIFEncoder() );
+        return std::shared_ptr<Encoder>( new GIFEncoder() );
     }
 
     struct GIFHeader

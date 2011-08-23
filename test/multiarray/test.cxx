@@ -1847,7 +1847,7 @@ struct MultiArrayPointoperatorsTest
         shouldEqualSequence(determinant.data(), determinant.data()+size, rdet.data());
                 
         tensorDeterminantMultiArray(srcMultiArrayRange(tensor2), destMultiArray(determinant));
-        shouldEqualTolerance(norm(determinant), 0.0, 1e-14);
+	shouldEqualTolerance(vigra::norm(determinant), 0.0, 1e-14);
 
         tensorEigenRepresentation(srcImageRange(tensor1), destImage(rtensor));
         tensorEigenvaluesMultiArray(srcMultiArrayRange(tensor1), destMultiArray(vector));

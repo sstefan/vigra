@@ -239,8 +239,8 @@ namespace vigra
     struct CodecFactory
     {
         virtual CodecDesc getCodecDesc() const = 0;
-        virtual std::auto_ptr<Decoder> getDecoder() const = 0;
-        virtual std::auto_ptr<Encoder> getEncoder() const = 0;
+        virtual std::shared_ptr<Decoder> getDecoder() const = 0;
+        virtual std::shared_ptr<Encoder> getEncoder() const = 0;
         virtual ~CodecFactory() {};
     };
 
@@ -251,10 +251,10 @@ namespace vigra
     // - (in case of decoders) the file's magic string
     // - the filename extension
 
-    VIGRA_EXPORT std::auto_ptr<Decoder>
+    VIGRA_EXPORT std::shared_ptr<Decoder>
     getDecoder( const std::string &, const std::string & = "undefined" );
 
-    VIGRA_EXPORT std::auto_ptr<Encoder>
+    VIGRA_EXPORT std::shared_ptr<Encoder>
     getEncoder( const std::string &, const std::string & = "undefined" );
 
     VIGRA_EXPORT std::string

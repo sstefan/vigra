@@ -467,18 +467,18 @@ ImageExportInfo & ImageExportInfo::setICCProfile(
 }
 
 // return an encoder for a given ImageExportInfo object
-std::auto_ptr<Encoder> encoder( const ImageExportInfo & info )
+std::shared_ptr<Encoder> encoder( const ImageExportInfo & info )
 {
-    std::auto_ptr<Encoder> enc;
+    std::shared_ptr<Encoder> enc;
 
     std::string filetype = info.getFileType();
     if ( filetype != "" ) {
         validate_filetype(filetype);
-        std::auto_ptr<Encoder> enc2
+        std::shared_ptr<Encoder> enc2
             = getEncoder( std::string( info.getFileName() ), filetype );
         enc = enc2;
     } else {
-        std::auto_ptr<Encoder> enc2
+        std::shared_ptr<Encoder> enc2
             = getEncoder( std::string( info.getFileName() ) );
         enc = enc2;
     }
@@ -545,7 +545,7 @@ std::auto_ptr<Encoder> encoder( const ImageExportInfo & info )
 ImageImportInfo::ImageImportInfo( const char * filename )
     : m_filename(filename)
 {
-    std::auto_ptr<Decoder> decoder = getDecoder(m_filename);
+    std::shared_ptr<Decoder> decoder = getDecoder(m_filename);
 
     m_filetype = decoder->getFileType();
     m_pixeltype = decoder->getPixelType();
@@ -673,7 +673,7 @@ const ImageImportInfo::ICCProfile & ImageImportInfo::getICCProfile() const
 }
 
 // return a decoder for a given ImageImportInfo object
-std::auto_ptr<Decoder> decoder( const ImageImportInfo & info )
+std::shared_ptr<Decoder> decoder( const ImageImportInfo & info )
 {
     std::string filetype = info.getFileType();
     validate_filetype(filetype);

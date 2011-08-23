@@ -32,6 +32,8 @@
 /*    OTHER DEALINGS IN THE SOFTWARE.                                   */
 /*                                                                      */
 /************************************************************************/
+namespace std { class type_info; }
+#include <typeinfo>
 
 #include <iostream>
 #include <fstream>
@@ -81,14 +83,14 @@ CodecDesc BmpCodecFactory::getCodecDesc() const
     return desc;
 }
 
-std::auto_ptr<Decoder> BmpCodecFactory::getDecoder() const
+std::shared_ptr<Decoder> BmpCodecFactory::getDecoder() const
 {
-    return std::auto_ptr<Decoder>( new BmpDecoder() );
+    return std::shared_ptr<Decoder>( new BmpDecoder() );
 }
 
-std::auto_ptr<Encoder> BmpCodecFactory::getEncoder() const
+std::shared_ptr<Encoder> BmpCodecFactory::getEncoder() const
 {
-    return std::auto_ptr<Encoder>( new BmpEncoder() );
+    return std::shared_ptr<Encoder>( new BmpEncoder() );
 }
 
 struct BmpFileHeader

@@ -141,14 +141,14 @@ namespace vigra {
         return desc;
     }
 
-    std::auto_ptr<Decoder> TIFFCodecFactory::getDecoder() const
+    std::shared_ptr<Decoder> TIFFCodecFactory::getDecoder() const
     {
-        return std::auto_ptr<Decoder>( new TIFFDecoder() );
+        return std::shared_ptr<Decoder>( new TIFFDecoder() );
     }
 
-    std::auto_ptr<Encoder> TIFFCodecFactory::getEncoder() const
+    std::shared_ptr<Encoder> TIFFCodecFactory::getEncoder() const
     {
-        return std::auto_ptr<Encoder>( new TIFFEncoder() );
+        return std::shared_ptr<Encoder>( new TIFFEncoder() );
     }
 
     class TIFFCodecImpl

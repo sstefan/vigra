@@ -396,7 +396,7 @@ doxygen_overloaded_function(template <...> void importVectorImage)
     template< class ImageIterator, class Accessor >
     void importVectorImage( const ImageImportInfo & info, ImageIterator iter, Accessor a )
     {
-        std::auto_ptr<Decoder> dec = decoder(info);
+        std::shared_ptr<Decoder> dec = decoder(info);
         std::string pixeltype = dec->getPixelType();
 
         if ( pixeltype == "UINT8" )
@@ -450,7 +450,7 @@ doxygen_overloaded_function(template <...> void importScalarImage)
     template < class ImageIterator, class Accessor >
     void importScalarImage( const ImageImportInfo & info, ImageIterator iter, Accessor a )
     {
-        std::auto_ptr<Decoder> dec = decoder(info);
+        std::shared_ptr<Decoder> dec = decoder(info);
         std::string pixeltype = dec->getPixelType();
 
         if ( pixeltype == "UINT8" )
@@ -1161,7 +1161,7 @@ doxygen_overloaded_function(template <...> void exportImage)
         typedef typename SrcAccessor::value_type AccessorValueType;
         typedef typename AccessorValueType::value_type SrcValueType;
         std::string pixeltype = info.getPixelType();
-        std::auto_ptr<Encoder> enc = encoder(info);
+        std::shared_ptr<Encoder> enc = encoder(info);
         bool downcast = negotiatePixelType(enc->getFileType(),
                         TypeAsString<SrcValueType>::result(), pixeltype);
         enc->setPixelType(pixeltype);
@@ -1208,7 +1208,7 @@ doxygen_overloaded_function(template <...> void exportImage)
     {
         typedef typename SrcAccessor::value_type SrcValueType;
         std::string pixeltype = info.getPixelType();
-        std::auto_ptr<Encoder> enc = encoder(info);
+        std::shared_ptr<Encoder> enc = encoder(info);
         bool downcast = negotiatePixelType(enc->getFileType(),
                            TypeAsString<SrcValueType>::result(), pixeltype);
         enc->setPixelType(pixeltype);
