@@ -199,7 +199,7 @@ ridgeRegression(MultiArrayView<2, T, C1> const & A,
     unsigned int m = rows;
     unsigned int n = cols;
 
-	Matrix<T> u(m, n), s(n, 1), v(n, n);
+    Matrix<T> u(m, n), s(n, 1), v(n, n);
 
     unsigned int rank = singularValueDecomposition(A, u, s, v);
     if(rank < n && lambda == 0.0)
@@ -324,7 +324,7 @@ ridgeRegressionSeries(MultiArrayView<2, T, C1> const & A,
     unsigned int m = rows;
     unsigned int n = cols;
 
-	Matrix<T> u(m, n), s(n, 1), v(n, n);
+    Matrix<T> u(m, n), s(n, 1), v(n, n);
 
     unsigned int rank = singularValueDecomposition(A, u, s, v);
 
@@ -487,10 +487,12 @@ struct LarsData
     }
 };
 
-template <class T, class C1, class C2, class Array1, class Array2>
-unsigned int leastAngleRegressionMainLoop(LarsData<T, C1, C2> & d,
-                  Array1 & activeSets, Array2 * lars_solutions, Array2 * lsq_solutions,
-                  LeastAngleRegressionOptions const & options)
+template <class T, class C1, class C2, class Array1, class Array2, class Array3>
+unsigned int 
+leastAngleRegressionMainLoop(LarsData<T, C1, C2> & d,
+                             Array1 & activeSets, 
+                             Array2 * lars_solutions, Array3 * lsq_solutions,
+                             LeastAngleRegressionOptions const & options)
 {
     using namespace vigra::functor;
 
@@ -607,26 +609,33 @@ unsigned int leastAngleRegressionMainLoop(LarsData<T, C1, C2> & d,
             if(enforce_positive)
             {
                 ArrayVector<Matrix<T> > nnresults;
-	            ArrayVector<ArrayVector<MultiArrayIndex> > nnactiveSets;
-	            LarsData<T, C1, C2> nnd(d, d.activeSetSize);
+                ArrayVector<ArrayVector<MultiArrayIndex> > nnactiveSets;
+                LarsData<T, C1, C2> nnd(d, d.activeSetSize);
 
-                leastAngleRegressionMainLoop(nnd, nnactiveSets, &nnresults, (Array2*)0,
+                leastAngleRegressionMainLoop(nnd, nnactiveSets, &nnresults, (Array3*)0,
                                              LeastAngleRegressionOptions().leastSquaresSolutions(false).nnlasso());
-                Matrix<T> nnlsq_solution(d.activeSetSize, 1);
+                //Matrix<T> nnlsq_solution(d.activeSetSize, 1);
+                typename Array2::value_type nnlsq_solution(Shape(d.activeSetSize, 1));
                 for(unsigned int k=0; k<nnactiveSets.back().size(); ++k)
                 {
                     nnlsq_solution(nnactiveSets.back()[k],0) = nnresults.back()[k];
                 }
-                lsq_solutions->push_back(nnlsq_solution);
+                //lsq_solutions->push_back(nnlsq_solution);
+                lsq_solutions->push_back(typename Array3::value_type());
+                lsq_solutions->back() = nnlsq_solution;
             }
             else
             {
-                lsq_solutions->push_back(d.next_lsq_solution.subarray(Shape(0,0), Shape(d.activeSetSize, 1)));
+                //lsq_solutions->push_back(d.next_lsq_solution.subarray(Shape(0,0), Shape(d.activeSetSize, 1)));
+                lsq_solutions->push_back(typename Array3::value_type());
+                lsq_solutions->back() = d.next_lsq_solution.subarray(Shape(0,0), Shape(d.activeSetSize, 1));
             }
         }
         if(lars_solutions != 0)
         {
-            lars_solutions->push_back(d.lars_solution.subarray(Shape(0,0), Shape(d.activeSetSize, 1)));
+            //lars_solutions->push_back(d.lars_solution.subarray(Shape(0,0), Shape(d.activeSetSize, 1)));
+            lars_solutions->push_back(typename Array2::value_type());
+            lars_solutions->back() = d.lars_solution.subarray(Shape(0,0), Shape(d.activeSetSize, 1));
         }
 
         // no further solutions possible
@@ -755,7 +764,7 @@ leastAngleRegressionImpl(MultiArrayView<2, T, C1> const & A, MultiArrayView<2, T
        This function implements Least Angle Regression (LARS) as described in
 
        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-       B.Efron, T.Hastie, I.Johnstone, and R.Tibshirani: <em>"Least Angle Regression"</em>,
+       B.Efron, T.Hastie, I.Johnstone, and R.Tibshirani: <i>"Least Angle Regression"</i>,
        Annals of Statistics 32(2):407-499, 2004.
 
        It is an efficient algorithm to solve the L1-regularized least squares (LASSO) problem
@@ -819,42 +828,42 @@ leastAngleRegressionImpl(MultiArrayView<2, T, C1> const & A, MultiArrayView<2, T
         <b>Usage:</b>
 
         \code
-	    int m = ..., n = ...;
-	    Matrix<double> A(m, n), b(m, 1);
-	    ... // fill A and b
+        int m = ..., n = ...;
+        Matrix<double> A(m, n), b(m, 1);
+        ... // fill A and b
 
         // normalize the input
-	    Matrix<double> offset(1,n), scaling(1,n);
-	    prepareColumns(A, A, offset, scaling, DataPreparationGoals(ZeroMean|UnitVariance));
-	    prepareColumns(b, b, DataPreparationGoals(ZeroMean));
+        Matrix<double> offset(1,n), scaling(1,n);
+        prepareColumns(A, A, offset, scaling, DataPreparationGoals(ZeroMean|UnitVariance));
+        prepareColumns(b, b, DataPreparationGoals(ZeroMean));
 
-	    // arrays to hold the output
-	    ArrayVector<ArrayVector<int> > activeSets;
-	    ArrayVector<Matrix<double> > solutions;
+        // arrays to hold the output
+        ArrayVector<ArrayVector<int> > activeSets;
+        ArrayVector<Matrix<double> > solutions;
 
-	    // run leastAngleRegression() in non-negative LASSO mode
-	    int numSolutions = leastAngleRegression(A, b, activeSets, solutions,
-	                                LeastAngleRegressionOptions().nnlasso());
+        // run leastAngleRegression() in non-negative LASSO mode
+        int numSolutions = leastAngleRegression(A, b, activeSets, solutions,
+                                    LeastAngleRegressionOptions().nnlasso());
 
-	    // print results
-	    Matrix<double> denseSolution(1, n);
-	    for (MultiArrayIndex k = 0; k < numSolutions; ++k)
-	    {
-		    // transform the sparse solution into a dense vector
-		    denseSolution.init(0.0); // ensure that inactive variables are zero
-		    for (unsigned int i = 0; i < activeSets[k].size(); ++i)
-		    {
-			    // set the values of the active variables;
-			    // activeSets[k][i] is the true index of the i-th variable in the active set
-			    denseSolution(0, activeSets[k][i]) = solutions[k](i,0);
-		    }
+        // print results
+        Matrix<double> denseSolution(1, n);
+        for (MultiArrayIndex k = 0; k < numSolutions; ++k)
+        {
+            // transform the sparse solution into a dense vector
+            denseSolution.init(0.0); // ensure that inactive variables are zero
+            for (unsigned int i = 0; i < activeSets[k].size(); ++i)
+            {
+                // set the values of the active variables;
+                // activeSets[k][i] is the true index of the i-th variable in the active set
+                denseSolution(0, activeSets[k][i]) = solutions[k](i,0);
+            }
 
-		    // invert the input normalization
-		    denseSolution = denseSolution * pointWise(scaling);
+            // invert the input normalization
+            denseSolution = denseSolution * pointWise(scaling);
 
-		    // output the solution
+            // output the solution
             std::cout << "solution " << k << ":\n" << denseSolution << std::endl;
-	    }
+        }
         \endcode
 
         <b>Required Interface:</b>
@@ -913,12 +922,12 @@ inline void
 nonnegativeLeastSquares(MultiArrayView<2, T, C1> const & A,
                         MultiArrayView<2, T, C2> const &b, MultiArrayView<2, T, C3> &x)
 {
-	vigra_precondition(columnCount(A) == rowCount(x) && rowCount(A) == rowCount(b),
-	    "nonnegativeLeastSquares(): Matrix shape mismatch.");
-	vigra_precondition(columnCount(b) == 1 && columnCount(x) == 1,
-	    "nonnegativeLeastSquares(): RHS and solution must be vectors (i.e. columnCount == 1).");
+    vigra_precondition(columnCount(A) == rowCount(x) && rowCount(A) == rowCount(b),
+        "nonnegativeLeastSquares(): Matrix shape mismatch.");
+    vigra_precondition(columnCount(b) == 1 && columnCount(x) == 1,
+        "nonnegativeLeastSquares(): RHS and solution must be vectors (i.e. columnCount == 1).");
 
-	ArrayVector<ArrayVector<MultiArrayIndex> > activeSets;
+    ArrayVector<ArrayVector<MultiArrayIndex> > activeSets;
     ArrayVector<Matrix<T> > results;
 
     leastAngleRegression(A, b, activeSets, results,

@@ -391,14 +391,19 @@ class NumpyAnyArray
 
         /**
          * Return the AxisTags of this array or a NULL pointer when the attribute
-           'axistags' is missing in the Python object.
+           'axistags' is missing in the Python object or this array has no data.
          */
     python_ptr axistags() const
     {
         static python_ptr key(PyString_FromString("axistags"), python_ptr::keep_count);
-        python_ptr axistags(PyObject_GetAttr(pyObject(), key), python_ptr::keep_count);
-        if(!axistags)
-            PyErr_Clear();
+        
+        python_ptr axistags;
+        if(pyObject())
+        {
+            axistags.reset(PyObject_GetAttr(pyObject(), key), python_ptr::keep_count);
+            if(!axistags)
+                PyErr_Clear();
+        }
         return axistags;
     }
 
@@ -503,7 +508,7 @@ constructArray(TaggedShape tagged_shape, TYPECODE typeCode, bool init, python_pt
     {
         if(!arraytype)
             arraytype = NumpyAnyArray::getArrayTypeObject();
-
+            
         inverse_permutation = axistags.permutationFromNormalOrder();
         vigra_precondition(ndim == (int)inverse_permutation.size(),
                      "axistags.permutationFromNormalOrder(): permutation has wrong size.");
@@ -708,13 +713,14 @@ class NumpyArray
        /**
          * Allocate new memory and copy data from a MultiArrayView.
          */
-    explicit NumpyArray(const view_type &other)
+    template <class U, class S>
+    explicit NumpyArray(const MultiArrayView<N, U, S> &other)
     {
         if(!other.hasData())
             return;
         vigra_postcondition(makeReference(init(other.shape(), false)),
-                  "NumpyArray(view_type): Python constructor did not produce a compatible array.");
-        static_cast<view_type &>(*this) = other;
+                  "NumpyArray(MultiArrayView): Python constructor did not produce a compatible array.");
+        view_type::operator=(other);
     }
 
         /**
@@ -795,6 +801,32 @@ class NumpyArray
         {
             NumpyArray copy;
             copy.reshapeIfEmpty(other.taggedShape(), 
+                "NumpyArray::operator=(): reshape failed unexpectedly.");
+            copy = other;
+            makeReferenceUnchecked(copy.pyObject());
+        }
+        return *this;
+    }
+
+        /**
+         * Assignment operator. If this is already a view with data
+         * (i.e. hasData() is true) and the shapes match, the RHS
+         * array contents are copied.  If this is an empty view,
+         * a new buffer with the RHS shape is allocated before copying.
+         */
+    template <class U, class S>
+    NumpyArray &operator=(const MultiArrayView<N, U, S> &other)
+    {
+        if(hasData())
+        {
+            vigra_precondition(shape() == other.shape(),
+                "NumpyArray::operator=(): shape mismatch.");
+            view_type::operator=(other);
+        }
+        else if(other.hasData())
+        {
+            NumpyArray copy;
+            copy.reshapeIfEmpty(other.shape(), 
                 "NumpyArray::operator=(): reshape failed unexpectedly.");
             copy = other;
             makeReferenceUnchecked(copy.pyObject());
