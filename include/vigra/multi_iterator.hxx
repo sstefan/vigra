@@ -1925,6 +1925,18 @@ struct MoveToScanOrderIndex
         MoveToScanOrderIndex<M-1>::exec(newIndex / shape[N-1-M], shape, point, 
                                          p1, strides1, p2, strides2);
     }
+
+    template <class Shape, class Ptr>
+    static void
+    exec(MultiArrayIndex newIndex, Shape const & shape,
+         Shape & point, Ptr & p)
+    {
+        enum { N = Shape::static_size };
+        MultiArrayIndex newPos = newIndex % shape[N-1-M];
+        p.template increment<N-1-M>(newPos - point[N-1-M]);
+        point[N-1-M] = newPos;
+        MoveToScanOrderIndex<M-1>::exec(newIndex / shape[N-1-M], shape, point, p);
+    }
 };
 
 template <>
@@ -1950,6 +1962,17 @@ struct MoveToScanOrderIndex<0>
         MultiArrayIndex newPos = newIndex % shape[N-1];
         p1 += (newPos - point[N-1]) * strides1[N-1];
         p2 += (newPos - point[N-1]) * strides2[N-1];
+        point[N-1] = newPos;
+    }
+
+    template <class Shape, class Ptr>
+    static void
+    exec(MultiArrayIndex newIndex, Shape const & shape,
+         Shape & point, Ptr & p)
+    {
+        enum { N = Shape::static_size };
+        MultiArrayIndex newPos = newIndex % shape[N-1];
+        p.template increment<N-1>(newPos - point[N-1]);
         point[N-1] = newPos;
     }
 };
@@ -2562,6 +2585,7 @@ class StridedScanOrderIterator<N, T, REFERENCE, POINTER, 1>
 
 
 //@}
+
 
 } // namespace vigra
 
