@@ -3,8 +3,10 @@ if(FFTW3_FOUND)
     ADD_DEFINITIONS(-DHasFFTW3)
     
     VIGRA_ADD_TEST(test_simpleanalysis test.cxx LIBRARIES vigraimpex ${FFTW3_LIBRARIES})
+    VIGRA_ADD_TEST(test_simpleanalysis_gridgraph test_gridgraph.cxx LIBRARIES vigraimpex ${FFTW3_LIBRARIES})
 else()
     VIGRA_ADD_TEST(test_simpleanalysis test.cxx LIBRARIES vigraimpex)
+    VIGRA_ADD_TEST(test_simpleanalysis_gridgraph test_gridgraph.cxx LIBRARIES vigraimpex)
 endif()
 
 VIGRA_COPY_TEST_DATA(noiseNormalizationTest.xv slantedEdgeMTF.xv lenna128.xv)

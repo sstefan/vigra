@@ -1,1 +1,3 @@
 VIGRA_ADD_TEST(test_volumelabeling test.cxx LIBRARIES vigraimpex)
+VIGRA_ADD_TEST(test_volumelabeling_gridgraph test_gridgraph.cxx LIBRARIES vigraimpex)
+

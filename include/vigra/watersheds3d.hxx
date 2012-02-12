@@ -303,77 +303,89 @@ unsigned int watershedLabeling3D( SrcIterator s_Iter, SrcShape srcShape, SrcAcce
 */
 doxygen_overloaded_function(template <...> unsigned int generateWatershedSeeds3D)
 
-#if 0
-template <unsigned int N, class T1, class C1, class T2, class C2>
-          class Neighborhood>
-unsigned int
-generateWatershedSeeds3D(MultiArrayView<N, T1, C1> in, MultiArrayView<N, T2, C2> out,
-                         Neighborhood neighborhood,
-                         SeedOptions const & options = SeedOptions())
-{
-    using namespace functor;
-    
-    vigra_precondition(in.shape() == out.shape(),
-        "generateWatershedSeeds3D(): Shape mismatch between input and output.");
-        
-    vigra_precondition(options.mini != SeedOptions::LevelSets || 
-                       options.thresholdIsValid<SrcType>(),
-        "generateWatershedSeeds3D(): SeedOptions.levelSets() must be specified with threshold.");
-    
-    MultiArray<N, UInt8> seeds(in.shape());
-    
-    if(options.mini == SeedOptions::LevelSets)
-    {
-        transformMultiArray(srcMultiArrayRange(in), destMultiArray(seeds),
-                            ifThenElse(Arg1() <= Param(options.thresh), Param(1), Param(0)));
-    }
-    else
-    {
-        localMinima(in, seeds,
-            LocalMinmaxOptions().neighborhood(Neighborhood::DirectionCount)
-                                .markWith(1.0)
-                                .threshold(options.thresh)
-                                .allowAtBorder()
-                                .allowPlateaus(options.mini == SeedOptions::ExtendedMinima));
-    }
-    
-    return labelVolumeWithBackground(srcMultiArrayRange(seeds), destMultiArray(out), 
-                                     neighborhood, 0);
-}
+#if 1
 
-template <class SrcIterator, class SrcAccessor,
-          class DestIterator, class DestAccessor>
-inline unsigned int
-generateWatershedSeeds(SrcIterator upperlefts, SrcIterator lowerrights, SrcAccessor sa,
-                       DestIterator upperleftd, DestAccessor da, 
-                       SeedOptions const & options = SeedOptions())
-{
-    return generateWatershedSeeds(upperlefts, lowerrights, sa, upperleftd, da, 
-                                   EightNeighborCode(), options);
-}
-
-template <class SrcIterator, class SrcAccessor,
+    template <class SrcIterator, class SrcShape, class SrcAccessor,
           class DestIterator, class DestAccessor,
           class Neighborhood>
 inline unsigned int
-generateWatershedSeeds(triple<SrcIterator, SrcIterator, SrcAccessor> src,
+generateWatershedSeeds3D(SrcIterator upperlefts, SrcShape shape, SrcAccessor sa,
+                       DestIterator upperleftd, DestAccessor da, 
+                       Neighborhood neighborhood,			 
+			 SeedOptions const & options = SeedOptions())
+{
+    const unsigned int N = SrcShape::static_size;
+    typedef typename SrcAccessor::value_type ValueType; 
+    typedef typename DestAccessor::value_type LabelType; 
+    using namespace functor;
+            
+    vigra_precondition(options.mini != SeedOptions::LevelSets || 
+                       options.thresholdIsValid<ValueType>(),
+        "generateWatershedSeeds3D(): SeedOptions.levelSets() must be specified with threshold.");
+    
+    MultiArray<N, UInt8> seeds(shape);
+    
+    if(options.mini == SeedOptions::LevelSets)
+    {
+        transformMultiArray(upperlefts, shape, sa,
+			    seeds.traverser_begin(), typename AccessorTraits<UInt8>::default_accessor(),
+                            ifThenElse(Arg1() <= Param(options.thresh), Param(1), Param(0)));
+    }
+	else
+	{
+        throw std::runtime_error("generateWatershedSeeds3D(): LocalMin variant not implemented yet.");
+// 	    // Requires N-D localMinima Code (done, but not extendedMinima!)
+#if 0
+ 	    localMinima(in, seeds,
+ 			LocalMinmaxOptions().neighborhood(Neighborhood::DirectionCount)
+			.markWith(1.0)
+			.threshold(options.thresh)
+			.allowAtBorder()
+			.allowPlateaus(options.mini == SeedOptions::ExtendedMinima));
+#endif
+	}
+
+    return labelVolumeWithBackground(seeds.traverser_begin(), seeds.shape(), 
+				     typename AccessorTraits<UInt8>::default_const_accessor(),
+				     upperleftd, da,				     
+                                     neighborhood, 0);
+}
+
+
+template <class SrcIterator, class SrcShape, class SrcAccessor,
+          class DestIterator, class DestAccessor>
+inline unsigned int
+generateWatershedSeeds3D(SrcIterator upperlefts, SrcShape shape, SrcAccessor sa,
+                       DestIterator upperleftd, DestAccessor da, 
+                       SeedOptions const & options = SeedOptions())
+{
+    return generateWatershedSeeds3D(upperlefts, shape, sa, upperleftd, da, 
+				    NeighborCode3DTwentySix(),
+				    options);
+}
+
+template <class SrcIterator, class SrcShape,  class SrcAccessor,
+          class DestIterator, class DestAccessor,
+          class Neighborhood>
+inline unsigned int
+generateWatershedSeeds3D(triple<SrcIterator, SrcShape, SrcAccessor> src,
                        pair<DestIterator, DestAccessor> dest, 
                        Neighborhood neighborhood,
                        SeedOptions const & options = SeedOptions())
 {
-    return generateWatershedSeeds(src.first, src.second, src.third,
+    return generateWatershedSeeds3D(src.first, src.second, src.third,
                                    dest.first, dest.second,    
                                    neighborhood, options);
 }
 
-template <class SrcIterator, class SrcAccessor,
+template <class SrcIterator, class SrcShape, class SrcAccessor,
           class DestIterator, class DestAccessor>
 inline unsigned int
-generateWatershedSeeds(triple<SrcIterator, SrcIterator, SrcAccessor> src,
+generateWatershedSeeds3D(triple<SrcIterator, SrcShape, SrcAccessor> src,
                        pair<DestIterator, DestAccessor> dest, 
                        SeedOptions const & options = SeedOptions())
 {
-    return generateWatershedSeeds(src.first, src.second, src.third,
+    return generateWatershedSeeds3D(src.first, src.second, src.third,
                                    dest.first, dest.second,    
                                    EightNeighborCode(), options);
 }

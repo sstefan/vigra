@@ -349,8 +349,8 @@ unsigned int labelImage(triple<SrcIterator, SrcIterator, SrcAccessor> src,
     equality comparable (first form), or an EqualityFunctor must be
     provided that realizes the desired predicate (second form). All
     pixel equal to the given '<TT>background_value</TT>' are ignored
-    when determining connected components and remain untouched in the
-    destination image and
+    when determining connected components and are set to label 0 in the
+    destination image.
 
     The destination's value type should be large enough to hold the
     labels without overflow. Region numbers will be a consecutive

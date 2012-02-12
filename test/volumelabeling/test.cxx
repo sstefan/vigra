@@ -268,6 +268,34 @@ struct VolumeLabelingTest
         }
     }
 
+    void labelingSixWithBackgroundTest1CheckNonzero()
+    {
+        IntVolume res(vol5);
+
+	// Documentation: 
+	// "All voxel equal to the given '<TT>background_value</TT>' are ignored
+	// when determining connected components and remain untouched in the
+	// destination volume" -> check this:
+        unsigned int maxLabel = labelVolumeWithBackground(srcMultiArrayRange(vol5), destMultiArray(res), NeighborCode3DSix(), 2.0);
+        should(4 == maxLabel);
+
+        static const int out5[] = { 0, 0, 0, 0, 0,    0, 1, 1, 1, 0,    0, 1, 1, 1, 0,    0, 1, 1, 1, 0,    0, 0, 0, 0, 0,
+                                    2, 2, 0, 2, 2,    2, 1, 0, 1, 2,    2, 2, 0, 2, 2,    2, 1, 0, 1, 2,    2, 2, 0, 2, 2,
+                                    0, 0, 0, 0, 0,    0, 2, 2, 2, 0,    0, 2, 3, 2, 0,    0, 2, 2, 2, 0,    0, 0, 0, 0, 0,
+                                    2, 2, 0, 2, 2,    2, 4, 0, 4, 2,    2, 2, 0, 2, 2,    2, 4, 0, 4, 2,    2, 2, 0, 2, 2,
+                                    0, 0, 0, 0, 0,    0, 4, 4, 4, 0,    0, 4, 4, 4, 0,    0, 4, 4, 4, 0,    0, 0, 0, 0, 0};
+
+        IntVolume::iterator i2 = res.begin();
+        IntVolume::iterator i2end = res.end();
+        const int * p = out5;
+
+        for(; i2 != i2end; ++i2, ++p)
+        {
+	    if (*p == 2) // 2.0 values should stick with in label "2" as in initialization:
+		should( *i2 == 2 );
+        }
+    }
+
 
     void labelingTwentySixTest1()
     {
@@ -400,6 +428,7 @@ struct VolumeLabelingTestSuite
         add( testCase( &VolumeLabelingTest::labelingSixTest3));
         add( testCase( &VolumeLabelingTest::labelingSixTest4));
         add( testCase( &VolumeLabelingTest::labelingSixWithBackgroundTest1));
+	//FAILS:        add( testCase( &VolumeLabelingTest::labelingSixWithBackgroundTest1CheckNonzero));
         add( testCase( &VolumeLabelingTest::labelingTwentySixTest1));
         add( testCase( &VolumeLabelingTest::labelingTwentySixTest2));
         add( testCase( &VolumeLabelingTest::labelingTwentySixTest3));

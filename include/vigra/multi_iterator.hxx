@@ -41,6 +41,7 @@
 #include <sys/types.h>
 #include "tinyvector.hxx"
 #include "iteratortags.hxx"
+#include <iostream>
 
 namespace vigra {
 
@@ -1963,6 +1964,18 @@ struct MoveToScanOrderIndex
         MoveToScanOrderIndex<M-1>::exec(newIndex / shape[N-1-M], shape, point, 
                                          p1, strides1, p2, strides2);
     }
+
+    template <class Shape, class Ptr>
+    static void
+    exec(MultiArrayIndex newIndex, Shape const & shape,
+         Shape & point, Ptr & p)
+    {
+        enum { N = Shape::static_size };
+        MultiArrayIndex newPos = newIndex % shape[N-1-M];
+        p.template increment<N-1-M>(newPos - point[N-1-M]);
+        point[N-1-M] = newPos;
+        MoveToScanOrderIndex<M-1>::exec(newIndex / shape[N-1-M], shape, point, p);
+    }
 };
 
 template <>
@@ -1988,6 +2001,17 @@ struct MoveToScanOrderIndex<0>
         MultiArrayIndex newPos = newIndex % shape[N-1];
         p1 += (newPos - point[N-1]) * strides1[N-1];
         p2 += (newPos - point[N-1]) * strides2[N-1];
+        point[N-1] = newPos;
+    }
+
+    template <class Shape, class Ptr>
+    static void
+    exec(MultiArrayIndex newIndex, Shape const & shape,
+         Shape & point, Ptr & p)
+    {
+        enum { N = Shape::static_size };
+        MultiArrayIndex newPos = newIndex % shape[N-1];
+        p.template increment<N-1>(newPos - point[N-1]);
         point[N-1] = newPos;
     }
 };
@@ -2059,6 +2083,8 @@ struct MoveToScanOrderIndex<0>
 
 }
 
+
+
     /** \brief Sequential iterator for MultiArrayView.
         
         This iterator provides STL-compatible random access iterator functionality for arbitrary 
@@ -2083,6 +2109,12 @@ class StridedScanOrderIterator
     enum { level = M-1 };
 
   public:
+    //    friend class OneNormGridNeighborIterator<N, T, REFERENCE, POINTER, M>;
+//     template<unsigned int K>
+//     friend class OneNormGridNeighborIterator<N, T, REFERENCE, POINTER, K>;
+    template<unsigned int N1, class T1, class REFERENCE1, class POINTER1, unsigned int M1>
+    friend class OneNormGridNeighborIterator; //<N1, T1, REFERENCE1, POINTER1, M1>;
+
 
     typedef typename base_type::value_type value_type;
     typedef typename base_type::pointer pointer;
@@ -2097,6 +2129,10 @@ class StridedScanOrderIterator
     
     StridedScanOrderIterator()
     {}
+
+//     StridedScanOrderIterator(const StridedScanOrderIterator& src)
+//       : base_type(src)
+//   {std::cout << "copySSOI"<<std::endl;}
     
     StridedScanOrderIterator(pointer i, 
                              shape_type const & shape, shape_type const & strides)
@@ -2133,13 +2169,13 @@ class StridedScanOrderIterator
     StridedScanOrderIterator & operator+=(const shape_type &coordOffset)
     {
         this->moveRelative(dot(coordOffset,this->strides_),
-               detail::CoordinateToScanOrder<N>::exec(this->shape_, coordOffset),
-               coordOffset);
+			   detail::CoordinateToScanOrder<N>::exec(this->shape_, coordOffset),
+			   coordOffset);
         return *this;
     }
     StridedScanOrderIterator & operator-=(const shape_type &coordOffset)
     {
-    return operator+=(-coordOffset);
+	return operator+=(-coordOffset);
     }
 
     StridedScanOrderIterator & operator--()
@@ -2173,6 +2209,15 @@ class StridedScanOrderIterator
         return res;
     }
 
+    StridedScanOrderIterator & moveRelative(const MultiArrayIndex &pointerOffset,
+                                            const MultiArrayIndex &indexOffset,
+                                            const shape_type &coordOffset)
+    {
+        base_type::moveRelative(pointerOffset, indexOffset, coordOffset);
+        this->point_[level] += coordOffset[level];
+        return *this;
+    }
+
     bool atBorder() const
     {
         return base_type::atBorder() || 
@@ -2189,6 +2234,7 @@ class StridedScanOrderIterator
             res |= (2 << 2*level);
         return res;
     }
+
     
     StridedScanOrderIterator operator+(MultiArrayIndex d) const
     {
@@ -2295,20 +2341,16 @@ class StridedScanOrderIterator
             --this->point_[level];
         }
     }
-    StridedScanOrderIterator & moveRelative(const MultiArrayIndex &pointerOffset,
-                                            const MultiArrayIndex &indexOffset,
-                                            const shape_type &coordOffset)
-    {
-        base_type::moveRelative(pointerOffset, indexOffset, coordOffset);
-        this->point_[level] += coordOffset[level];
-        return *this;
-    }
 };
+
+
+
 
 template <unsigned int N, class T, class REFERENCE, class POINTER>
 class StridedScanOrderIterator<N, T, REFERENCE, POINTER, 1>
 {
     enum { level = 0 };
+    typedef StridedScanOrderIterator<N, T, REFERENCE, POINTER> refpos_type;
 
   public:
 
@@ -2362,14 +2404,14 @@ class StridedScanOrderIterator<N, T, REFERENCE, POINTER, 1>
     StridedScanOrderIterator & operator+=(const shape_type &coordOffset)
     {
         this->moveRelative(dot(coordOffset,strides_), 
-               detail::CoordinateToScanOrder<N>::exec(shape_, coordOffset),
-               coordOffset);
+			   detail::CoordinateToScanOrder<N>::exec(shape_, coordOffset),
+			   coordOffset);
         return *this;
     }
 
     StridedScanOrderIterator & operator-=(const shape_type &coordOffset)
     {
-    return operator+=(-coordOffset);
+	return operator+=(-coordOffset);
     }
     
 
@@ -2458,6 +2500,18 @@ class StridedScanOrderIterator<N, T, REFERENCE, POINTER, 1>
     StridedScanOrderIterator operator-(const shape_type &coordOffset) const
     {
         return StridedScanOrderIterator(*this) -= coordOffset;
+    }
+
+    StridedScanOrderIterator & moveRelative(const MultiArrayIndex &pointerOffset,
+                                            const MultiArrayIndex &indexOffset,
+                                            const shape_type &coordOffset)
+    {
+        point_[level] += coordOffset[level];
+
+        index_+= indexOffset;
+        i_ += pointerOffset;
+        
+        return *this;
     }
     
     MultiArrayIndex
@@ -2585,25 +2639,18 @@ class StridedScanOrderIterator<N, T, REFERENCE, POINTER, 1>
         detail::MoveToScanOrderIndex<N-1>::exec(newIndex, shape_, point_, i_, strides_, p2, strides2);
     }
 
-    StridedScanOrderIterator & moveRelative(const MultiArrayIndex &pointerOffset,
-                                            const MultiArrayIndex &indexOffset,
-                                            const shape_type &coordOffset)
-    {
-        point_[level] += coordOffset[level];
-
-        index_+= indexOffset;
-        i_ += pointerOffset;
-        
-        return *this;
-    }
-
     pointer i_;
     shape_type point_, shape_, strides_;
     MultiArrayIndex index_;
 };
 
 
+
+
+
+
 //@}
+
 
 } // namespace vigra
 

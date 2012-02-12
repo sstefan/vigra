@@ -1,0 +1,197 @@
+\documentclass[a4paper,11pt,german]{article}
+\usepackage[latin1]{inputenc}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsthm}
+\usepackage{graphicx}
+\usepackage{enumerate}
+
+\usepackage[sectionbib]{natbib}
+\usepackage{bibentry}
+\usepackage[german]{babel}
+
+% Hoehe um 20mm vergroessern
+\addtolength{\topmargin}{-10mm}
+\addtolength{\textheight}{20mm}
+% Breite um 20mm vergroessern
+\addtolength{\oddsidemargin}{-10mm}
+\addtolength{\evensidemargin}{-10mm}
+\addtolength{\textwidth}{20mm}
+
+\renewcommand{\familydefault}{ptm}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\theoremstyle{plain}
+\newtheorem{thm}{Theorem}[subsection]
+\newtheorem{lem}{Lemma}[subsection]
+\newtheorem{prop}{Proposition}[subsection]
+\newtheorem{cor}{Corollary}[subsection]
+%\newtheorem{defn}{Definition}
+%\newtheorem{ass}{Assumption}
+
+\theoremstyle{definition}
+\newtheorem{defn}{Definition}[subsection]
+\newtheorem{ass}{Assumption}[subsection]
+
+\theoremstyle{remark}
+\newtheorem{rmk}{Remark}[subsection]
+\newtheorem{exmp}{Example}[subsection]
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\newcommand{\bitem}{\begin{itemize}}
+\newcommand{\eitem}{\end{itemize}}
+\newcommand{\mc}[1]{\mathcal{#1}}
+\newcommand{\mb}[1]{\mathbb{#1}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\B}{\mathbb{B}}
+\newcommand{\U}{\mathbb{U}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\PP}{\mathbb{P}}
+\newcommand{\bpm}{\begin{pmatrix}}
+\newcommand{\epm}{\end{pmatrix}}
+\newcommand{\T}{\top}
+\newcommand{\tr}{\mathrm{tr}}
+\newcommand{\ol}[1]{\overline{#1}}
+\newcommand{\la}{\langle}
+\newcommand{\ra}{\rangle}
+\newcommand{\si}{\sigma}
+\newcommand{\mrm}[1]{\mathrm{#1}}
+\newcommand{\Diag}{\mathrm{Diag}}
+\newcommand{\row}[2]{{#1}_{#2,\bullet}}
+\newcommand{\col}[2]{{#1}_{\bullet,#2}}
+\newcommand{\veps}{\varepsilon}
+\newcommand{\toset}{\rightrightarrows}
+\newcommand{\gdw}{\Leftrightarrow}
+\newcommand{\w}{\omega}
+
+\newcommand{\VI}{\mathrm{VI}}
+\newcommand{\SOL}{\mathrm{SOL}}
+\newcommand{\graph}{\mathrm{gph}}
+\newcommand{\dom}{\mathrm{dom}}
+\newcommand{\rint}{\mathrm{rint}}
+\newcommand{\bd}{\mathrm{bd}}
+\newcommand{\rge}{\mathrm{rge}}
+\newcommand{\epi}{\mathrm{epi}}
+\newcommand{\lev}{\mathrm{lev}}
+\newcommand{\argmin}{\mathrm{argmin}}
+\newcommand{\argmax}{\mathrm{argmax}}
+
+\newcommand{\st}[1]{{\scriptstyle #1}}
+\newcommand{\sst}[1]{{\scriptscriptstyle #1}}
+
+
+%%%%%%%%%%%%%%%%%%%%%
+
+
+
+\title{Titel}
+\author{Stefan Schmidt}
+% \institution{%\\}
+
+\begin{document}
+% \bibliographystyle{stsabrvnat}
+% \nobibliography{diss1}
+
+\renewcommand\cite[1]{\citep{#1}}
+
+
+
+% \abstract{Dies ist ein Template.}
+
+\maketitle
+
+\section{Watershed algorithm run on a typical SBFSEM dataset}
+
+A log of the queue operations was obtained from a run of the watershed
+algorithm on a typical SBFSEM dataset of size 127 x 127 x
+127.\footnote{Thanks to Christoph Strehle for providing the
+  data} % sbfsem-bnb-ilastik.h5
+The watershed algorithm was not run on the pure intensity data, but on
+a derived feature with integer values in the numerical range
+208-1792. % TODO: ask: WHICH FEATURE EXACTLY?
+Hence, besides the priority-queue based flooding algorithm, the
+\emph{turbo watershed} algorithm is also applicable. % TODO: Find ref.
+
+A histogram of the run on this data
+% TODO: FIG. einfuegen
+% histogram_of_queue_sizes.pdf
+of the queue size over time
+reveals a heavy tail of the distribution towards large queue sizes
+above 350000 entries, which about one fifth of the total image size. % ca. 17-22 \% of the total image size.
+% out of 2048383 voxels in total; means 4096766 queue operations.
+Hence, memory usage is a major concern, and the size of the stored
+objects should not be excessively large.
+
+%  *  the turbo code might be faster because it doesn't need any
+%  tiebreaking, and same-level objects are not reordered.
+%  The PQ, however, supposedly shifts major parts of the queue around
+%  quite often.
+
+
+\section{Experiments}
+\label{sec:experiments}
+
+A benchmark framework has been established in which a log file
+resulting from the real segmentation algorithm run is used to simulate
+the typical behavior with various variants of the involved algorithmic
+components and data structures. 
+
+The following parameters are varied in a controlled fashion:
+\begin{tabular}{ll}
+  Operating System & Linux, Windows \\
+  Processor & 32bit, 64bit \\
+  Compiler & gcc, VC \\ 
+%  Compiler flags & 
+ \hline
+ number of repetitions & \\
+ algorithm type & PQ, Turbo, PQ with Allocator \\
+ queue object type & SOI\footnote{Scan-Order-Index}, Coordinates,
+ SSOI\footnote{StridedScanOrderIterator object}, SlicedSSOI\footnote{A
+ smaller version of StridedScanOrderIterator, having only state
+ pointer, index, and coordinates, but not shape nor strides members} \\
+ queue object size & (evtl. padded by payload) \\ 
+\end{tabular}
+
+The following measurements are taken for each run:
+\begin{tabular}{ll}  
+  Timing & wall time in ms \\
+  Peak memory usage & (directly related to object size) \\ %   * Average Memory usage
+\end{tabular}
+
+
+There are supposedly two main influence factors for the runtime of the
+algorithms which can be singled out. 
+\begin{itemize}
+\item 
+  The overhead linear in the number of queue operations (push, pop),
+  \begin{itemize}
+  \item constant (measurement overhead, or the image access not taken
+    into account here)
+  \item dependent on size (copying operations)
+  \item dependent on type (conversion to neighborhood iterator and back)
+  \end{itemize}
+
+\item 
+  The complexity non-linear in the number of queue-operations but
+  depending on the actual priorities, such as 
+  \begin{itemize}
+  \item copying operations while reorganizing the heap.
+  \end{itemize}
+
+\end{itemize}
+
+
+\bibliographystyle{plain}
+\bibliography{diss1}
+% \nobibliography*
+
+\end{document}
+
+%%% Local Variables: 
+%%% mode: latex
+%%% TeX-master: t
+%%% End: 
+
+
+

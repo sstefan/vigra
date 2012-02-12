@@ -1,0 +1,6 @@
+  -fdce                                 [enabled]
+  -ftree-dce                            [enabled]
+  -fdse                                 [enabled]
+  -ftree-dse                            [enabled]
+  -ftree-builtin-call-dce               [enabled]
+  -ftree-fre                            [enabled]

@@ -1,6 +1,9 @@
+// Testing code: Adapting to grid-graphs and general graphs
+//#define TEST_ONLY
+
 /************************************************************************/
 /*                                                                      */
-/*               Copyright 1998-2010 by Ullrich Koethe                  */
+/*    Copyright 1998-2012 by Stefan Schmidt, Ullrich Koethe             */
 /*                                                                      */
 /*    This file is part of the VIGRA computer vision library.           */
 /*    The VIGRA Website is                                              */
@@ -39,464 +42,529 @@
 
 #include <vector>
 #include <functional>
-#include "multi_array.hxx"
-#include "localminmax.hxx"
-#if 0
+#include <vigra/multi_array.hxx> 
+#include <vigra/graphs.hxx>
+#include <vigra/localminmax.hxx>
+#include <vigra/multi_labelgraph.hxx>
+
+
 namespace vigra {
 
-namespace detail {
 
-// direct neighborhood
-template <unsigned int M>
-struct IsLocalExtremum2
-{
-    template <class T, class Shape, class Compare>
-    static bool exec(T * v, Shape const & stride, Compare const & compare)
-    {
-        return compare(*v, *(v-stride[M])) && 
-                compare(*v, *(v+stride[M])) && 
-                IsLocalExtremum2<M-1>::exec(v, stride, compare);
-    }
-
-    template <class Shape, class T, class Compare>
-    static bool execAtBorder(Shape const & point, Shape const & shape,
-                  T * v, Shape const & stride, Compare const & compare)
-    {
-        return (point[M] > 0 && compare(*v, *(v-stride[M]))) && 
-                (point[M] < shape[M]-1 && compare(*v, *(v+stride[M]))) && 
-                IsLocalExtremum2<M-1>::exec(point, shape, v, stride, compare);
-    }
-};
-
-template <>
-struct IsLocalExtremum2<0>
-{
-    template <class T, class Shape, class Compare>
-    static bool exec(T * v, Shape const & stride, Compare const & compare)
-    {
-        return compare(*v, *(v-stride[0])) &&  compare(*v, *(v+stride[0]));
-    }
-
-    template <class Shape, class T, class Compare>
-    static bool execAtBorder(Shape const & point, Shape const & shape,
-                  T * v, Shape const & stride, Compare const & compare)
-    {
-        return (point[0] > 0 && compare(*v, *(v-stride[0]))) && 
-                (point[0] < shape[0]-1 && compare(*v, *(v+stride[0])));
-    }
-};
-
-// indirect neighborhood
-template <unsigned int M>
-struct IsLocalExtremum3
-{
-    template <class T, class Shape, class Compare>
-    static bool exec(T * v, Shape const & stride, Compare const & compare)
-    {
-        return exec(v, v, stride, compare, true);
-    }
-    
-    template <class T, class Shape, class Compare>
-    static bool exec(T * v, T * u, Shape const & stride, 
-                     Compare const & compare, bool isCenter)
-    {
-        return IsLocalExtremum3<M-1>::exec(v, u-stride[M], stride, compare, false) &&
-               IsLocalExtremum3<M-1>::exec(v, u, stride, compare, isCenter) &&
-               IsLocalExtremum3<M-1>::exec(v, u+stride[M], stride, compare, false);
-    }
-
-    template <class Shape, class T, class Compare>
-    static bool execAtBorder(Shape const & point, Shape const & shape,
-                  T * v, Shape const & stride, Compare const & compare)
-    {
-        return execAtBorder(point, shape, v, v, stride, compare, true);
-    }
-
-    template <class Shape, class T, class Compare>
-    static bool execAtBorder(Shape const & point, Shape const & shape,
-                             T * v, T * u, Shape const & stride, 
-                             Compare const & compare, bool isCenter)
-    {
-        return (point[M] > 0 && IsLocalExtremum3<M-1>::exec(v, u-stride[M], stride, compare, false)) && 
-                IsLocalExtremum3<M-1>::exec(point, shape, v, u, stride, compare, isCenter) &&
-                (point[M] < shape[M]-1 && IsLocalExtremum3<M-1>::exec(v, u+stride[M], stride, compare, false));
-    }
-};
-
-template <>
-struct IsLocalExtremum3<0>
-{
-    template <class T, class Shape, class Compare>
-    static bool exec(T * v, Shape const & stride, Compare const & compare)
-    {
-        return compare(*v, *(v-stride[0])) &&  compare(*v, *(v+stride[0]));
-    }
-
-    template <class T, class Shape, class Compare>
-    static bool exec(T * v, T * u, Shape const & stride, 
-                     Compare const & compare, bool isCenter)
-    {
-        return compare(*v, *(u-stride[0])) &&  
-                (!isCenter && compare(*v, *u)) &&
-                compare(*v, *(u+stride[0]));
-    }
-
-    template <class Shape, class T, class Compare>
-    static bool execAtBorder(Shape const & point, Shape const & shape,
-                  T * v, Shape const & stride, Compare const & compare)
-    {
-        return (point[0] > 0 && compare(*v, *(v-stride[0]))) && 
-                (point[0] < shape[0]-1 && compare(*v, *(v+stride[0])));
-    }
-
-    template <class Shape, class T, class Compare>
-    static bool execAtBorder(Shape const & point, Shape const & shape,
-                             T * v, T * u, Shape const & stride, 
-                             Compare const & compare, bool isCenter)
-    {
-        return (point[M] > 0 && compare(*v, *(u-stride[0]))) && 
-                (!isCenter && compare(*v, *u)) &&
-                (point[M] < shape[M]-1 && compare(*v, *(u+stride[0])));
-    }
-};
-
-template <unsigned int N, class T1, class C1, class T2, class C2, class Compare>
+    //! localMinMax() variant for BGL-like interfaces
+    template <class Graph, class T1Map, class T2Map, class Compare>
 void
-localMinMax(MultiArrayView<N, T1, C1> src,
-            MultiArrayView<N, T2, C2> dest,
-            T2 marker, unsigned int neighborhood,
-            T1 threshold,
-            Compare compare,
-            bool allowExtremaAtBorder = false)
+localMinMaxGraph(
+	     Graph &G, 
+ 	     T1Map &src,
+ 	     T2Map &dest,
+	     typename vigragraph::property_traits<T2Map>::value_type marker, // unsigned int neighborhood,
+	     typename vigragraph::property_traits<T1Map>::value_type threshold,
+	     Compare compare)
 {
-    typedef typename MultiArrayShape<N>::type Shape;
-    typedef MultiCoordinateNavigator<N> Navigator;
-    
-    Shape shape = src.shape(),
-          unit  = Shape(MultiArrayIndex(1));
-    
-    vigra_precondition(shape == dest.shape(),
-        "localMinMax(): Shape mismatch between input and output.");
-    vigra_precondition(neighborhood == 2*N || neighborhood == pow(3, N) - 1,
-        "localMinMax(): Invalid neighborhood.");
-    
-    if(allowExtremaAtBorder)
-    {
-        for(unsigned int d=0; d<N; ++d)
-        {
-            Navigator nav(shape, d);
-            for(; nav.hasMore(); ++nav)
-            {
-                Shape i = nav.begin();
-                
-                for(; i[d] < shape[d]; i[d] += shape[d]-1)
-                {                    
-                    if(!compare(src[i], threshold))
-                        continue;
-                    
-                    if(neighborhood == 2*N)
-                    {
-                        if(IsLocalExtremum2<N>::execAtBorder(i, shape, &src[i], 
-                                                              src.stride(), compare))
-                            dest[i] = marker;
-                    }
-                    else
-                    {
-                        if(IsLocalExtremum3<N>::execAtBorder(i, shape, &src[i], 
-                                                              src.stride(), compare))
-                            dest[i] = marker;
-                    }
-                }
-            }
-        }
-    }
+    typedef typename vigragraph::graph_traits<Graph>::vertex_iterator graph_scanner;
+    typedef typename vigragraph::graph_traits<Graph>::adjacency_iterator neighbor_iterator;
 
-    src = src.subarray(unit, shape - unit);
-    dest = dest.subarray(unit, shape - unit);
-    shape = src.shape();
+    typedef typename vigragraph::property_traits<T1Map>::value_type T1;
+    typedef typename vigragraph::property_traits<T2Map>::value_type T2;
 
-    Navigator nav(shape, 0);
-    for(; nav.hasMore(); ++nav)
-    {
-        Shape i = nav.begin();
-        
-        for(; i[0] < shape[0]; ++i[0])
-        {                    
-            if(!compare(src[i], threshold))
-                continue;
-            
-            if(neighborhood == 2*N)
-            {
-                if(IsLocalExtremum2<N>::exec(&src[i], src.stride(), compare))
-                    dest[i] = marker;
-            }
-            else
-            {
-                if(IsLocalExtremum3<N>::exec(&src[i], src.stride(), compare))
-                    dest[i] = marker;
-            }
-        }
+    graph_scanner srcit, srcend;
+    vigragraph::tie(srcit, srcend) = vigragraph::vertices(G);
+
+    neighbor_iterator nbit, nbend;
+#ifdef TEST_ONLY    
+    size_t counter=0;
+    size_t counter1=0;
+    T1 dummysum=0;
+#endif
+    for (; srcit != srcend; ++srcit) {
+#ifdef TEST_ONLY    
+      ++counter1;
+#endif
+	  const T1 refval = src[*srcit];
+
+	  if (!compare(refval, threshold))
+	      continue;
+	  
+	  vigragraph::tie(nbit, nbend) = vigragraph::adjacent_vertices(*srcit, G);
+	  
+	  bool local_extremum = true;
+	  int j=0;
+	  for (;nbit != nbend; ++nbit) {
+	    ++j;
+#ifdef TEST_ONLY    
+	    ++counter;
+#endif
+	    if (!compare(refval, src[*nbit])) {
+	      local_extremum = false;
+	      break;
+	    }
+	  }
+	  if (local_extremum)
+#ifdef TEST_ONLY    
+	      dummysum += marker;
+#else	 
+  	      dest[*srcit] = marker;
+#endif
+
+	  // TODO: case of no neighbors => local min/max per definition?
     }
+#ifdef TEST_ONLY    
+    std::cout << " counter=" << counter << " counter1=" << counter1 << std::endl;
+    std::cout << " dummysum=" << ((int)dummysum) << std::endl;
+#endif
+
 }
 
-template <class T1, class C1, class T2, class C2, 
-          class Neighborhood, class Compare, class Equal>
+
+
+
+
+  // Two-Iterator-Variant of the above:
+    template <class Graph, class Graph2, class T1Map, class T2Map, class Compare>
 void
-extendLocalMinMax(MultiArrayView<3, T1, C1> src,
-                  MultiArrayView<3, T2, C2> dest,
-                  T2 marker, 
-                  Neighborhood neighborhood,
-                  Compare compare, Equal equal, 
-                  T1 threshold,
-                  bool allowExtremaAtBorder = false)
+localMinMaxGraph2(
+	     Graph &Gsrc, 
+ 	     T1Map &src,
+	     Graph2 &Gdest, 
+ 	     T2Map &dest,
+	     typename vigragraph::property_traits<T2Map>::value_type marker, // unsigned int neighborhood,
+	     typename vigragraph::property_traits<T1Map>::value_type threshold,
+	     Compare compare)
 {
-    typedef typename MultiArrayView<3, T1, C1>::traverser SrcIterator;
-    typedef typename MultiArrayView<3, T2, C2>::traverser DestIterator;
-    typedef typename MultiArray<3, int>::traverser LabelIterator;
-    typedef MultiArrayShape<3>::type Shape;
-    
-    Shape shape = src.shape();
-    MultiArrayIndex w = shape[0], h = shape[1], d = shape[2];
-    
-    vigra_precondition(shape == dest.shape(),
-        "extendLocalMinMax(): Shape mismatch between input and output.");
+    typedef typename vigragraph::graph_traits<Graph>::vertex_iterator src_scanner;
+    typedef typename vigragraph::graph_traits<Graph2>::vertex_iterator dest_scanner;
+    typedef typename vigragraph::graph_traits<Graph>::adjacency_iterator neighbor_iterator;
 
-    MultiArray<3, int> labels(shape);
+    typedef typename vigragraph::property_traits<T1Map>::value_type T1;
+    typedef typename vigragraph::property_traits<T2Map>::value_type T2;
 
-    int number_of_regions = labelVolume(srcMultiArrayRange(src), destMultiArray(labels),
-                                        neighborhood, equal);
+    src_scanner srcit, srcend;
+    vigragraph::tie(srcit, srcend) = vigragraph::vertices(Gsrc);
+
+    dest_scanner destit, destend;
+    vigragraph::tie(destit, destend) = vigragraph::vertices(Gdest);
+
+    neighbor_iterator nbit, nbend;
+#ifdef TEST_ONLY    
+    size_t counter=0;
+    size_t counter1=0;
+    T1 dummysum=0;
+#endif
+    for (; srcit != srcend; ++srcit, ++destit) {
+#ifdef TEST_ONLY    
+      ++counter1;
+#endif
+	  const T1 refval = src[*srcit];
+
+	  if (!compare(refval, threshold))
+	      continue;
+	  
+	  vigragraph::tie(nbit, nbend) = vigragraph::adjacent_vertices(*srcit, Gsrc);
+	  
+	  bool local_extremum = true;
+	  int j=0;
+	  for (;nbit != nbend; ++nbit) {
+	    ++j;
+#ifdef TEST_ONLY    
+	    ++counter;
+#endif
+	    if (!compare(refval, src[*nbit])) {
+	      local_extremum = false;
+	      break;
+	    }
+	  }
+	  if (local_extremum)
+#ifdef TEST_ONLY    
+	      dummysum += marker;
+#else	 
+  	      dest[*destit] = marker;
+#endif
+
+	  // TODO: case of no neighbors => local min/max per definition?
+    }
+#ifdef TEST_ONLY    
+    std::cout << " counter=" << counter << " counter1=" << counter1 << std::endl;
+    std::cout << " dummysum=" << ((int)dummysum) << std::endl;
+#endif
+
+}
+
+
+
+  // Two-Iterator-Variant of the above: (vigra version of the BGL-like interface: vigra::ajdacent_vertices takes iterator, not *iterator argument.)
+    template <class Graph, class Graph2, class T1Map, class T2Map, class Compare>
+void
+localMinMaxGraph2vigra(
+	     Graph &Gsrc, 
+ 	     T1Map &src,
+	     Graph2 &Gdest, 
+ 	     T2Map &dest,
+	     typename vigragraph::property_traits<T2Map>::value_type marker, // unsigned int neighborhood,
+	     typename vigragraph::property_traits<T1Map>::value_type threshold,
+	     Compare compare)
+{
+    typedef typename vigragraph::graph_traits<Graph>::vertex_iterator src_scanner;
+    typedef typename vigragraph::graph_traits<Graph2>::vertex_iterator dest_scanner;
+    typedef typename vigragraph::graph_traits<Graph>::adjacency_iterator neighbor_iterator;
+
+    typedef typename vigragraph::property_traits<T1Map>::value_type T1;
+    typedef typename vigragraph::property_traits<T2Map>::value_type T2;
+
+    src_scanner srcit, srcend;
+    vigragraph::tie(srcit, srcend) = vigragraph::vertices(Gsrc);
+
+    dest_scanner destit, destend;
+    vigragraph::tie(destit, destend) = vigragraph::vertices(Gdest);
+
+    neighbor_iterator nbit, nbend;
+#ifdef TEST_ONLY    
+    size_t counter=0;
+    size_t counter1=0;
+    T1 dummysum=0;
+#endif
+    for (; srcit != srcend; ++srcit, ++destit) {
+#ifdef TEST_ONLY    
+      ++counter1;
+#endif
+      const T1 refval =  vigragraph::get(src, *srcit); // src[*srcit];
+
+	  if (!compare(refval, threshold))
+	      continue;
+	  
+#if 1
+	  //vigragraph::tie(nbit, nbend) = vigragraph::adjacent_vertices(*srcit, Gsrc);
+	  vigragraph::tie(nbit, nbend) = vigragraph::adjacent_vertices_at_iterator(srcit, Gsrc);
+
+	  // std::pair<neighbor_iterator, neighbor_iterator> nbs = vigra::adjacent_vertices(srcit, Gsrc);
+	  //	  neighbor_iterator &nbit(nbs.first), &nbend(nbs.second);
+#else
+	  // direct call:
+	  nbit = Gsrc.get_neighbor_vertex_iterator(srcit);
+	  nbend = Gsrc.get_neighbor_vertex_end_iterator(srcit);
+#endif    
+	  bool local_extremum = true;
+	  int j=0;
+	  for (;nbit != nbend; ++nbit) {
+	    ++j;
+#ifdef TEST_ONLY    
+	    ++counter;
+#endif
+	    //	    if (!compare(refval, src[*nbit])) {
+	    if (!compare(refval, vigragraph::get(src, *nbit))) {
+	      local_extremum = false;
+	      break;
+	    }
+	  }
+	  if (local_extremum)
+#ifdef TEST_ONLY    
+	      dummysum += marker;
+#else	 
+	  vigragraph::put(dest, *destit, marker); //  dest[*destit] = marker;
+#endif
+
+	  // TODO: case of no neighbors => local min/max per definition?
+    }
+#ifdef TEST_ONLY    
+    std::cout << " counter=" << counter << " counter1=" << counter1 << std::endl;
+    std::cout << " dummysum=" << ((int)dummysum) << std::endl;
+#endif
+
+}
+
+
+  // Two-Iterator-Variant of the above: (BGL-like interface)
+    template <class Graph, class Graph2, class T1Map, class T2Map, class Compare>
+void
+localMinMaxGraph2boost(
+	     Graph &Gsrc, 
+ 	     T1Map &src,
+	     Graph2 &Gdest, 
+ 	     T2Map &dest,
+	     typename vigragraph::property_traits<T2Map>::value_type marker, // unsigned int neighborhood,
+	     typename vigragraph::property_traits<T1Map>::value_type threshold,
+	     Compare compare)
+{
+    typedef typename vigragraph::graph_traits<Graph>::vertex_iterator src_scanner;
+    typedef typename vigragraph::graph_traits<Graph2>::vertex_iterator dest_scanner;
+    typedef typename vigragraph::graph_traits<Graph>::adjacency_iterator neighbor_iterator;
+
+    typedef typename vigragraph::property_traits<T1Map>::value_type T1;
+    typedef typename vigragraph::property_traits<T2Map>::value_type T2;
+
+    src_scanner srcit, srcend;
+    vigragraph::tie(srcit, srcend) = vigragraph::vertices(Gsrc);
+
+    dest_scanner destit, destend;
+    vigragraph::tie(destit, destend) = vigragraph::vertices(Gdest);
+
+    neighbor_iterator nbit, nbend;
+#ifdef TEST_ONLY    
+    size_t counter=0;
+    size_t counter1=0;
+    T1 dummysum=0;
+#endif
+    for (; srcit != srcend; ++srcit, ++destit) {
+#ifdef TEST_ONLY    
+      ++counter1;
+#endif
+      const T1 refval =  vigragraph::get(src, *srcit); // src[*srcit];
+
+	  if (!compare(refval, threshold))
+	      continue;
+	  
+	  vigragraph::tie(nbit, nbend) = vigragraph::adjacent_vertices(*srcit, Gsrc);
+	  bool local_extremum = true;
+	  int j=0;
+	  for (;nbit != nbend; ++nbit) {
+	    ++j;
+#ifdef TEST_ONLY    
+	    ++counter;
+#endif
+	    //	    if (!compare(refval, src[*nbit])) {
+	    if (!compare(refval, vigragraph::get(src, *nbit))) {
+	      local_extremum = false;
+	      break;
+	    }
+	  }
+	  if (local_extremum)
+#ifdef TEST_ONLY    
+	      dummysum += marker;
+#else	 
+	  vigragraph::put(dest, *destit, marker); //  dest[*destit] = marker;
+#endif
+
+	  // TODO: case of no neighbors => local min/max per definition?
+    }
+#ifdef TEST_ONLY    
+    std::cout << " counter=" << counter << " counter1=" << counter1 << std::endl;
+    std::cout << " dummysum=" << ((int)dummysum) << std::endl;
+#endif
+
+}
+
+
+
+
+
+  // Attempt without LValue propmaps, using only the free functions
+  // to access ReadablePropertyMap (input) and WritablePropertyMap (label)
+    template <class Graph, class T1Map, class T2Map, class Compare>
+void
+localMinMaxGraph3boost(
+	     Graph const &G, 
+ 	     T1Map const &src,
+ 	     T2Map &dest,
+	     typename vigragraph::property_traits<T2Map>::value_type marker, // unsigned int neighborhood,
+	     typename vigragraph::property_traits<T1Map>::value_type threshold,
+	     Compare const &compare)
+{
+    typedef typename vigragraph::graph_traits<Graph>::vertex_iterator graph_scanner;
+    typedef typename vigragraph::graph_traits<Graph>::adjacency_iterator neighbor_iterator;
+
+    typedef typename vigragraph::property_traits<T1Map>::value_type T1;
+    typedef typename vigragraph::property_traits<T2Map>::value_type T2;
+
+    graph_scanner srcit, srcend;
+    vigragraph::tie(srcit, srcend) = vigragraph::vertices(G);
+
+    neighbor_iterator nbit, nbend;
+#ifdef TEST_ONLY    
+    size_t counter=0;
+    size_t counter1=0;
+    T1 dummysum=0;
+#endif
+    for (; srcit != srcend; ++srcit) {
+#ifdef TEST_ONLY    
+      ++counter1;
+#endif
+      const T1 refval = vigragraph::get(src, *srcit);
+
+      if (!compare(refval, threshold))
+	  continue;
+	  
+      // MAIN PROBLEM WITH BOOST INTERFACE:
+      // adjacent_vertices is called with a vertex_descriptor,
+      // not the iterator which possibly has more state!
+      // -> potentially expensive to reconstruct iterator!
+      vigragraph::tie(nbit, nbend) = vigragraph::adjacent_vertices(*srcit, G);
+	  
+      bool local_extremum = true;
+      int j=0;
+      for (;nbit != nbend; ++nbit) {
+	  ++j;
+#ifdef TEST_ONLY    
+	  ++counter;
+#endif
+	  if (!compare(refval, vigragraph::get(src, *nbit))) {
+	      local_extremum = false;
+	      break;
+	  }
+      }
+	  if (local_extremum)
+#ifdef TEST_ONLY    
+	      dummysum += marker;
+#else	 
+	  vigragraph::put(dest, *srcit, marker);
+#endif
+
+	  // TODO: case of no neighbors => local min/max per definition?
+    }
+#ifdef TEST_ONLY    
+    std::cout << " counter=" << counter << " counter1=" << counter1 << std::endl;
+    std::cout << " dummysum=" << ((int)dummysum) << std::endl;
+#endif
+
+}
+
+
+
+
+// not BGL-compatible: calls vigra::adjacent_vertices with vertex_iterator directly
+// to avoid unnecessary conversion vertex_iterator (SSOI/CI) -> vertex_descriptor (coords) -> vertex_iterator (begin())+coord-offset
+// TODO: also try to avoid "tie(...,...)" and use an iterator with hasMore() interface!
+    template <class Graph, class T1Map, class T2Map, class Compare>
+void
+localMinMaxGraph3vigra(
+	     Graph &G, 
+ 	     T1Map &src,
+ 	     T2Map &dest,
+	     typename vigragraph::property_traits<T2Map>::value_type marker, // unsigned int neighborhood,
+	     typename vigragraph::property_traits<T1Map>::value_type threshold,
+	     Compare compare)
+{
+    typedef typename vigragraph::graph_traits<Graph>::vertex_iterator graph_scanner;
+    typedef typename vigragraph::graph_traits<Graph>::adjacency_iterator neighbor_iterator;
+
+    typedef typename vigragraph::property_traits<T1Map>::value_type T1;
+    typedef typename vigragraph::property_traits<T2Map>::value_type T2;
+
+    graph_scanner srcit, srcend;
+    vigragraph::tie(srcit, srcend) = vigragraph::vertices(G);
+
+    neighbor_iterator nbit, nbend;
+#ifdef TEST_ONLY    
+    size_t counter=0;
+    size_t counter1=0;
+    T1 dummysum=0;
+#endif
+    for (; srcit != srcend; ++srcit) {
+#ifdef TEST_ONLY    
+      ++counter1;
+#endif
+      const T1 refval = vigragraph::get(src, *srcit);
+
+      if (!compare(refval, threshold))
+	  continue;
+	  
+      // MAIN PROBLEM WITH BOOST INTERFACE:
+      // adjacent_vertices is called with a vertex_descriptor,
+      // not the iterator which possibly has more state!
+      // -> potentially expensive to reconstruct iterator!
+      vigragraph::tie(nbit, nbend) = vigragraph::adjacent_vertices_at_iterator(srcit, G);
+	  
+      bool local_extremum = true;
+      int j=0;
+      for (;nbit != nbend; ++nbit) {
+	  ++j;
+#ifdef TEST_ONLY    
+	  ++counter;
+#endif
+	  if (!compare(refval, vigragraph::get(src, *nbit))) {
+	      local_extremum = false;
+	      break;
+	  }
+      }
+	  if (local_extremum)
+#ifdef TEST_ONLY    
+	      dummysum += marker;
+#else	
+	      vigragraph::put(dest, *srcit, marker);
+#endif
+
+	  // TODO: case of no neighbors => local min/max per definition?
+    }
+#ifdef TEST_ONLY    
+    std::cout << " counter=" << counter << " counter1=" << counter1 << std::endl;
+    std::cout << " dummysum=" << ((int)dummysum) << std::endl;
+#endif
+
+}
+
+
+
+
+
+
+
+
+template <class Graph, class T1Map, class T2Map, class TmpLabelMap, class Compare, class Equality>
+void
+extendedLocalMinMaxGraph(
+	     Graph const &G, 
+ 	     T1Map const &src,
+ 	     T2Map &dest,
+	     TmpLabelMap &tmpLabels,
+	     typename vigragraph::property_traits<T2Map>::value_type marker, 
+	     typename vigragraph::property_traits<T1Map>::value_type threshold,
+	     Compare const &compare,
+	     Equality const &equal)
+{
+    typedef typename vigragraph::graph_traits<Graph>::vertex_iterator graph_scanner;
+    typedef typename vigragraph::graph_traits<Graph>::adjacency_iterator neighbor_iterator;
+
+    typedef typename vigragraph::property_traits<T1Map>::value_type T1;
+    typedef typename vigragraph::property_traits<T2Map>::value_type T2;
+
+
+    int number_of_regions = labelGraph(G, src, tmpLabels, equal);
+    // std::cout << "NUMBER OF REGIONS: " << number_of_regions << std::endl;
 
     // assume that a region is a extremum until the opposite is proved
-    ArrayVector<unsigned char> isExtremum(number_of_regions+1, (unsigned char)1);
-    
-    SrcIterator zs = src.traverser_begin();
-    LabelIterator zl = labels.traverser_begin();
-    for(MultiArrayIndex z = 0; z != d; ++z, ++zs.dim2(), ++zl.dim2())
-    {
-        SrcIterator ys(zs);
-        LabelIterator yl(zl);
+    std::vector<unsigned char> isExtremum(number_of_regions + 1, (unsigned char)1);
 
-        for(MultiArrayIndex y = 0; y != h; ++y, ++ys.dim1(), ++yl.dim1())
-        {
-            SrcIterator xs(ys);
-            LabelIterator xl(yl);
+    graph_scanner srcit, srcend;
+    vigragraph::tie(srcit, srcend) = vigragraph::vertices(G);
+    neighbor_iterator nbit, nbend;
+    for (; srcit != srcend; ++srcit) {
+      const T1 refval = vigragraph::get(src, *srcit);
 
-            for(MultiArrayIndex x = 0; x != w; ++x, ++xs.dim0(), ++xl.dim0())
-            {
-                int lab = *xl;
-                T1 v = *xs;
-                
-                if(isExtremum[lab] == 0)
-                    continue;
-                    
-                if(!compare(v, threshold))
-                {
-                    // mark all regions that don't exceed the threshold as non-extremum
-                    isExtremum[lab] = 0;
-                    continue;
-                }
+      const int lab = vigragraph::get(tmpLabels, *srcit);
 
-                AtVolumeBorder atBorder = isAtVolumeBorder(x, y, z, w, h, d);
-                if(atBorder == NotAtBorder)
-                {
-                    NeighborhoodCirculator<SrcIterator, Neighborhood> cs(xs);
-                    NeighborhoodCirculator<LabelIterator, Neighborhood> cl(xl);
-                    for(i=0; i<Neighborhood::DirectionCount; ++i, ++cs, ++cl)
-                    {
-                        if(lab != *cl && compare(*cs,v))
-                        {
-                            isExtremum[lab] = 0;
-                            break;
-                        }
-                    }
-                }
-                else
-                {
-                    if(allowExtremaAtBorder)
-                    {
-                        RestrictedNeighborhoodCirculator<SrcIterator, Neighborhood> 
-                                                                   cs(xs, atBorder), scend(cs);
-                        do
-                        {
-                            if(lab != *(xl+cs.diff()) && compare(cs,v))
-                            {
-                                isExtremum[lab] = 0;
-                                break;
-                            }
-                        }
-                        while(++cs != scend);
-                    }
-                    else
-                    {
-                        isExtremum[lab] = 0;
-                    }
-                }
-            }
-        }
+      if (isExtremum[lab] == 0)
+	  continue;
+
+      if (!compare(refval, threshold)) {
+	  // mark all regions that don't exceed the threshold as non-extremum
+	  isExtremum[lab] = 0;
+	  continue;	  
+      }
+
+      vigragraph::tie(nbit, nbend) = vigragraph::adjacent_vertices(*srcit, G);
+	  
+      for (;nbit != nbend; ++nbit) {
+	  const int nblab = vigragraph::get(tmpLabels, *nbit);
+	  //	  if ((lab != nblab) && (!compare(refval, vigragraph::get(src, *nbit)))) {
+	  if ((lab != nblab) && (compare(vigragraph::get(src, *nbit), refval))) {
+	      isExtremum[lab] = 0;
+	      break;
+	  }
+      }
     }
-
-
-    zl = labels.traverser_begin();
-    DestIterator zd = dest.traverser_begin();
-    for(MultiArrayIndex z = 0; z != d; ++z, ++zl.dim2(), ++zd.dim2())
-    {
-        LabelIterator yl(zl);
-        DestIterator yd(zd);
-
-        for(MultiArrayIndex y = 0; y != h; ++y, ++yl.dim1(), ++yd.dim1())
-        {
-            LabelIterator xl(yl);
-            DestIterator xd(yd);
-
-            for(MultiArrayIndex x = 0; x != w; ++x, ++xl.dim0(), ++xd.dim0())
-            {
-                if(isExtremum[*xl])
-                    *xd = marker;
-            }
-        }
+    
+    // second pass: read out and mark extrema
+    vigragraph::tie(srcit, srcend) = vigragraph::vertices(G);
+    for (; srcit != srcend; ++srcit) {
+	if (isExtremum[vigragraph::get(tmpLabels, *srcit)])
+	    vigragraph::put(dest, *srcit, marker);
     }
 }
 
-} // namespace detail
 
-/********************************************************/
-/*                                                      */
-/*                       localMinima                    */
-/*                                                      */
-/********************************************************/
 
-// documentation is in localminmax.hxx
-template <unsigned int N, class T1, class C1, class T2, class C2>
-void
-localMinima(MultiArrayView<N, T1, C1> src,
-            MultiArrayView<N, T2, C2> dest,
-            LocalMinmaxOptions const & options = LocalMinmaxOptions())
-{
-    T1 threshold = options.use_threshold
-                           ? std::min(NumericTraits<T1>::max(), (T1)options.thresh)
-                           : NumericTraits<T1>::max();
-    T2 marker = (T2)options.marker;
-    
-    vigra_precondition(!options.allow_plateaus,
-        "localMinima(): Option 'allowPlateaus' is not implemented for arbitrary dimensions,\n"
-        "               use extendedLocalMinima() for 2D and 3D problems.");
-
-    if(options.neigh == 0)
-        options.neigh = 2*N;
-    if(options.neigh == 1)
-        options.neigh = pow(3, N) - 1;
-    
-    detail::localMinMax(src, dest, marker, options.neigh, 
-                        threshold, std::less<T1>(), options.allow_at_border);
-}
-
-/********************************************************/
-/*                                                      */
-/*                       localMaxima                    */
-/*                                                      */
-/********************************************************/
-
-// documentation is in localminmax.hxx
-template <unsigned int N, class T1, class C1, class T2, class C2>
-void
-localMaxima(MultiArrayView<N, T1, C1> src,
-            MultiArrayView<N, T2, C2> dest,
-            LocalMinmaxOptions const & options = LocalMinmaxOptions())
-{
-    T1 threshold = options.use_threshold
-                           ? std::max(NumericTraits<T1>::min(), (T1)options.thresh)
-                           : NumericTraits<T1>::min();
-    T2 marker = (T2)options.marker;
-    
-    vigra_precondition(!options.allow_plateaus,
-        "localMaxima(): Option 'allowPlateaus' is not implemented for arbitrary dimensions,\n"
-        "               use extendedLocalMinima() for 2D and 3D problems.");
-
-    if(options.neigh == 0)
-        options.neigh = 2*N;
-    if(options.neigh == 1)
-        options.neigh = pow(3, N) - 1;
-    
-    detail::localMinMax(src, dest, marker, options.neigh, 
-                        threshold, std::greater<T1>(), options.allow_at_border);
-}
-
-/**************************************************************************/
-
-/********************************************************/
-/*                                                      */
-/*                 extendedLocalMinima                  */
-/*                                                      */
-/********************************************************/
-
-// documentation is in localminmax.hxx
-template <class T1, class C1, class T2, class C2,
-          class Neighborhood, class EqualityFunctor>
-inline void
-extendedLocalMinima(MultiArrayView<3, T1, C1> src,
-                    MultiArrayView<3, T2, C2> dest,
-                    LocalMinmaxOptions const & options = LocalMinmaxOptions())
-{
-    T1 threshold = options.use_threshold
-                           ? std::min(NumericTraits<T1>::max(), (T1)options.thresh)
-                           : NumericTraits<T1>::max();
-    T2 marker = (T2)options.marker;
-    
-    if(options.neigh == 0 || options.neigh == 6)
-    {
-        detail::extendedLocalMinMax(src, dest, marker, NeighborCode3DSix(), 
-                                    threshold, std::less<T1>(), std::equal_to<T1>(), 
-                                    options.allow_at_border);
-    }
-    else if(options.neigh == 1 || options.neigh == 26)
-    {
-        detail::extendedLocalMinMax(src, dest, marker, NeighborCode3DTwentySix(), 
-                                    threshold, std::less<T1>(), std::equal_to<T1>(), 
-                                    options.allow_at_border);
-    }
-    else
-        vigra_precondition(false,
-          "extendedLocalMinima(): Invalid neighborhood.");
-}
-
-/********************************************************/
-/*                                                      */
-/*                 extendedLocalMaxima                  */
-/*                                                      */
-/********************************************************/
-
-// documentation is in localminmax.hxx
-template <class T1, class C1, class T2, class C2,
-          class Neighborhood, class EqualityFunctor>
-inline void
-extendedLocalMaxima(MultiArrayView<3, T1, C1> src,
-                    MultiArrayView<3, T2, C2> dest,
-                    LocalMinmaxOptions const & options = LocalMinmaxOptions())
-{
-    T1 threshold = options.use_threshold
-                           ? std::max(NumericTraits<T1>::min(), (T1)options.thresh)
-                           : NumericTraits<T1>::min();
-    T2 marker = (T2)options.marker;
-    
-    if(options.neigh == 0 || options.neigh == 6)
-    {
-        detail::extendedLocalMinMax(src, dest, marker, NeighborCode3DSix(), 
-                                    threshold, std::greater<T1>(), std::equal_to<T1>(), 
-                                    options.allow_at_border);
-    }
-    else if(options.neigh == 1 || options.neigh == 26)
-    {
-        detail::extendedLocalMinMax(src, dest, marker, NeighborCode3DTwentySix(), 
-                                    threshold, std::greater<T1>(), std::equal_to<T1>(), 
-                                    options.allow_at_border);
-    }
-    else
-        vigra_precondition(false,
-          "extendedLocalMaxima(): Invalid neighborhood.");
-}
 
 } // namespace vigra
 
-#endif
+
 
 #endif // VIGRA_MULTI_LOCALMINMAX_HXX

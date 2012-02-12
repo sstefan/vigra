@@ -185,7 +185,7 @@ enum SRGType {
     This algorithm implements seeded region growing as described in
 
     R. Adams, L. Bischof: "<em> Seeded Region Growing</em>", IEEE Trans. on Pattern
-    Analysis and Maschine Intelligence, vol 16, no 6, 1994, and
+    Analysis and Machine Intelligence, vol 16, no 6, 1994, and
 
     Ullrich K&ouml;the:
     <em><a href="http://hci.iwr.uni-heidelberg.de/people/ukoethe/papers/index.php#cite_primary_segmentation">Primary Image Segmentation</a></em>,
@@ -698,6 +698,7 @@ fastSeededRegionGrowing(SrcIterator srcul, SrcIterator srclr, SrcAccessor as,
                         if(ad(c) == 0)
                         {
                             std::ptrdiff_t priority = (std::ptrdiff_t)stats[label].cost(as(isx));
+
                             pqueue.push(pos, priority);
                             break;
                         }

@@ -1022,7 +1022,7 @@ class HDF5File
         datasetName = get_absolute_path(datasetName);
 
         typename MultiArrayShape<N>::type chunkSize;
-        for(int i = 0; i < N; i++){
+        for(unsigned int i = 0; i < N; i++){
             chunkSize[i] = iChunkSize;
         }
         write_(datasetName, array, detail::getH5DataType<T>(), 1, chunkSize, compression);
@@ -1080,7 +1080,7 @@ class HDF5File
         datasetName = get_absolute_path(datasetName);
 
         typename MultiArrayShape<N>::type chunkSize;
-        for(int i = 0; i < N; i++){
+        for(unsigned int i = 0; i < N; i++){
             chunkSize[i] = iChunkSize;
         }
         write_(datasetName, array, detail::getH5DataType<T>(), SIZE, chunkSize, compression);
@@ -1133,7 +1133,7 @@ class HDF5File
         datasetName = get_absolute_path(datasetName);
 
         typename MultiArrayShape<N>::type chunkSize;
-        for(int i = 0; i < N; i++){
+        for(unsigned int i = 0; i < N; i++){
             chunkSize[i] = iChunkSize;
         }
         write_(datasetName, array, detail::getH5DataType<T>(), 3, chunkSize, compression);
@@ -1412,7 +1412,7 @@ class HDF5File
         datasetName = get_absolute_path(datasetName);
 
         typename MultiArrayShape<N>::type chunkSize;
-        for(int i = 0; i < N; i++){
+        for(unsigned int i = 0; i < N; i++){
             chunkSize[i] = iChunkSize;
         }
         createDataset<N,T>(datasetName, shape, init, chunkSize, compressionParameter);
@@ -1460,7 +1460,7 @@ class HDF5File
         if(chunkSize[0] > 0)
         {
             hsize_t cSize [N];
-            for(int i = 0; i<N; i++)
+            for(unsigned int i = 0; i<N; i++)
             {
                 cSize[i] = chunkSize[N-1-i];
             }
@@ -1772,7 +1772,7 @@ class HDF5File
     void write_attribute_(std::string name, const std::string & attribute_name,
                           const MultiArrayView<N, T, UnstridedArrayTag> & array,
                           const hid_t datatype, 
-                          const int numBandsOfType)
+                          const unsigned int numBandsOfType)
     {
         // shape of the array. Add one dimension, if array contains non-scalars.
         ArrayVector<hsize_t> shape(array.shape().begin(), array.shape().end());
@@ -1841,7 +1841,7 @@ class HDF5File
         /* low-level read function to write vigra MultiArray data from attributes
          */
     template<unsigned int N, class T>
-    inline void read_attribute_(std::string datasetName, std::string attributeName, MultiArrayView<N, T, UnstridedArrayTag> array, const hid_t datatype, const int numBandsOfType)
+    inline void read_attribute_(std::string datasetName, std::string attributeName, MultiArrayView<N, T, UnstridedArrayTag> array, const hid_t datatype, const unsigned int numBandsOfType)
     {
         std::string dataset_path = get_absolute_path(datasetName);
         // open Attribute handle
@@ -1910,7 +1910,7 @@ class HDF5File
     inline void write_(std::string &datasetName, 
                        const MultiArrayView<N, T, UnstridedArrayTag> & array, 
                        const hid_t datatype, 
-                       const int numBandsOfType, 
+                       const unsigned int numBandsOfType, 
                        typename MultiArrayShape<N>::type &chunkSize, 
                        int compressionParameter = 0)
     {
@@ -1996,7 +1996,7 @@ class HDF5File
     template<unsigned int N, class T>
     inline void read_(std::string datasetName, 
                       MultiArrayView<N, T, UnstridedArrayTag> array, 
-                      const hid_t datatype, const int numBandsOfType)
+                      const hid_t datatype, const unsigned int numBandsOfType)
     {
         //Prepare to read without using HDF5ImportInfo
         ArrayVector<hsize_t> dimshape = getDatasetShape(datasetName);
@@ -2057,7 +2057,7 @@ class HDF5File
        /* low-level write function to write vigra unstrided MultiArray data into a sub-block of a dataset
        */
     template<unsigned int N, class T>
-    inline void writeBlock_(std::string datasetName, typename MultiArrayShape<N>::type &blockOffset, const MultiArrayView<N, T, UnstridedArrayTag> & array, const hid_t datatype, const int numBandsOfType)
+    inline void writeBlock_(std::string datasetName, typename MultiArrayShape<N>::type &blockOffset, const MultiArrayView<N, T, UnstridedArrayTag> & array, const hid_t datatype, const unsigned int numBandsOfType)
     {
         // open dataset if it exists
         std::string errorMessage = "HDF5File::writeBlock(): Error opening dataset '" + datasetName + "'.";
@@ -2068,7 +2068,7 @@ class HDF5File
         hsize_t bshape [N];
         hsize_t bones [N];
 
-        for(int i = 0; i < N; i++){
+        for(unsigned int i = 0; i < N; i++){
             boffset[i] = blockOffset[N-1-i];
             bshape[i] = array.size(N-1-i);
             bones[i] = 1;
@@ -2088,7 +2088,7 @@ class HDF5File
         /* low-level read function to read vigra unstrided MultiArray data from a sub-block of a dataset
         */
     template<unsigned int N, class T>
-    inline void readBlock_(std::string datasetName, typename MultiArrayShape<N>::type &blockOffset, typename MultiArrayShape<N>::type &blockShape, MultiArrayView<N, T, UnstridedArrayTag> &array, const hid_t datatype, const int numBandsOfType)
+    inline void readBlock_(std::string datasetName, typename MultiArrayShape<N>::type &blockOffset, typename MultiArrayShape<N>::type &blockShape, MultiArrayView<N, T, UnstridedArrayTag> &array, const hid_t datatype, const unsigned int numBandsOfType)
     {
         //Prepare to read without using HDF5ImportInfo
         //ArrayVector<hsize_t> dimshape = getDatasetShape(datasetName) ;
@@ -2112,7 +2112,7 @@ class HDF5File
         hsize_t bshape [N];
         hsize_t bones [N];
 
-        for(int i = 0; i < N; i++){
+        for(unsigned int i = 0; i < N; i++){
             // vigra and hdf5 use different indexing
             boffset[i] = blockOffset[N-1-i];
             //bshape[i] = blockShape[i];
@@ -2140,7 +2140,7 @@ namespace detail {
 
 template <class Shape>
 inline void
-selectHyperslabs(HDF5Handle & mid1, HDF5Handle & mid2, Shape const & shape, int & counter, const int elements, const int numBandsOfType)
+selectHyperslabs(HDF5Handle & mid1, HDF5Handle & mid2, Shape const & shape, int & counter, const int elements, const unsigned int numBandsOfType)
 {
     // select hyperslab in HDF5 file
     hsize_t shapeHDF5[2];
@@ -2184,7 +2184,7 @@ selectHyperslabs(HDF5Handle & mid1, HDF5Handle & mid2, Shape const & shape, int 
 
 template <class DestIterator, class Shape, class T>
 inline void
-readHDF5Impl(DestIterator d, Shape const & shape, const hid_t dataset_id, const hid_t datatype, ArrayVector<T> & buffer, int & counter, const int elements, const int numBandsOfType, MetaInt<0>)
+readHDF5Impl(DestIterator d, Shape const & shape, const hid_t dataset_id, const hid_t datatype, ArrayVector<T> & buffer, int & counter, const int elements, const unsigned int numBandsOfType, MetaInt<0>)
 {
     HDF5Handle mid1, mid2;
 
@@ -2210,7 +2210,7 @@ readHDF5Impl(DestIterator d, Shape const & shape, const hid_t dataset_id, const 
 
 template <class DestIterator, class Shape, class T, int N>
 void
-readHDF5Impl(DestIterator d, Shape const & shape, const hid_t dataset_id, const hid_t datatype, ArrayVector<T> & buffer, int & counter, const int elements, const int numBandsOfType, MetaInt<N>)
+readHDF5Impl(DestIterator d, Shape const & shape, const hid_t dataset_id, const hid_t datatype, ArrayVector<T> & buffer, int & counter, const int elements, const unsigned int numBandsOfType, MetaInt<N>)
 {
     DestIterator dend = d + shape[N];
     for(; d < dend; ++d)
@@ -2288,7 +2288,7 @@ inline void readHDF5(const HDF5ImportInfo &info, MultiArrayView<N, FFTWComplex<T
 
 // unstrided target multi array
 template<unsigned int N, class T>
-void readHDF5(const HDF5ImportInfo &info, MultiArrayView<N, T, UnstridedArrayTag> array, const hid_t datatype, const int numBandsOfType) 
+void readHDF5(const HDF5ImportInfo &info, MultiArrayView<N, T, UnstridedArrayTag> array, const hid_t datatype, const unsigned int numBandsOfType) 
 {
     int offset = (numBandsOfType > 1);
 
@@ -2331,7 +2331,7 @@ inline void readHDF5(const HDF5ImportInfo &info, MultiArrayView<N, RGBValue<T>, 
 
 // strided target multi array
 template<unsigned int N, class T>
-void readHDF5(const HDF5ImportInfo &info, MultiArrayView<N, T, StridedArrayTag> array, const hid_t datatype, const int numBandsOfType)
+void readHDF5(const HDF5ImportInfo &info, MultiArrayView<N, T, StridedArrayTag> array, const hid_t datatype, const unsigned int numBandsOfType)
 {
     int offset = (numBandsOfType > 1);
 
@@ -2453,7 +2453,7 @@ inline hid_t createFile(std::string filePath, bool append_ = true)
 }
 
 template<unsigned int N, class T, class Tag>
-void createDataset(const char* filePath, const char* pathInFile, const MultiArrayView<N, T, Tag> & array, const hid_t datatype, const int numBandsOfType, HDF5Handle & file_handle, HDF5Handle & dataset_handle)
+void createDataset(const char* filePath, const char* pathInFile, const MultiArrayView<N, T, Tag> & array, const hid_t datatype, const unsigned int numBandsOfType, HDF5Handle & file_handle, HDF5Handle & dataset_handle)
 {
     std::string path_name(pathInFile), group_name, data_set_name, message;
     std::string::size_type delimiter = path_name.rfind('/');
@@ -2522,7 +2522,7 @@ namespace detail {
 
 template <class DestIterator, class Shape, class T>
 inline void
-writeHDF5Impl(DestIterator d, Shape const & shape, const hid_t dataset_id, const hid_t datatype, ArrayVector<T> & buffer, int & counter, const int elements, const int numBandsOfType, MetaInt<0>)
+writeHDF5Impl(DestIterator d, Shape const & shape, const hid_t dataset_id, const hid_t datatype, ArrayVector<T> & buffer, int & counter, const int elements, const unsigned int numBandsOfType, MetaInt<0>)
 {
     DestIterator dend = d + (typename DestIterator::difference_type)shape[0];
     int k = 0;
@@ -2546,7 +2546,7 @@ writeHDF5Impl(DestIterator d, Shape const & shape, const hid_t dataset_id, const
 
 template <class DestIterator, class Shape, class T, int N>
 void
-writeHDF5Impl(DestIterator d, Shape const & shape, const hid_t dataset_id, const hid_t datatype, ArrayVector<T> & buffer, int & counter, const int elements, const int numBandsOfType, MetaInt<N>)
+writeHDF5Impl(DestIterator d, Shape const & shape, const hid_t dataset_id, const hid_t datatype, ArrayVector<T> & buffer, int & counter, const int elements, const unsigned int numBandsOfType, MetaInt<N>)
 {
         DestIterator dend = d + (typename DestIterator::difference_type)shape[N];
         for(; d < dend; ++d)
@@ -2624,7 +2624,7 @@ inline void writeHDF5(const char* filePath, const char* pathInFile, const MultiA
 
 // unstrided multi arrays
 template<unsigned int N, class T>
-void writeHDF5(const char* filePath, const char* pathInFile, const MultiArrayView<N, T, UnstridedArrayTag> & array, const hid_t datatype, const int numBandsOfType)
+void writeHDF5(const char* filePath, const char* pathInFile, const MultiArrayView<N, T, UnstridedArrayTag> & array, const hid_t datatype, const unsigned int numBandsOfType)
 {
     HDF5Handle file_handle;
     HDF5Handle dataset_handle;
@@ -2667,7 +2667,7 @@ inline void writeHDF5(const char* filePath, const char* pathInFile, const MultiA
 
 // strided multi arrays
 template<unsigned int N, class T>
-void writeHDF5(const char* filePath, const char* pathInFile, const MultiArrayView<N, T, StridedArrayTag> & array, const hid_t datatype, const int numBandsOfType)
+void writeHDF5(const char* filePath, const char* pathInFile, const MultiArrayView<N, T, StridedArrayTag> & array, const hid_t datatype, const unsigned int numBandsOfType)
 {
     HDF5Handle file_handle;
     HDF5Handle dataset_handle;

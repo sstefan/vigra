@@ -599,6 +599,7 @@ unsigned int labelVolumeWithBackground(SrcIterator s_Iter, SrcShape srcShape, Sr
     return count;
 }
 
+
 //@}
 
 } //end of namespace vigra

@@ -462,6 +462,8 @@ template <int SIZE>
 struct LoopType
 {
     typedef typename IfBool<(SIZE <= 5), UnrollLoop<SIZE>, ExecLoop<SIZE> >::type type;
+    //disable explicit loop unrolling:
+    // typedef typename IfBool<(SIZE <= 0), UnrollLoop<SIZE>, ExecLoop<SIZE> >::type type;
 
 };
 

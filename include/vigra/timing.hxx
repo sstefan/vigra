@@ -207,7 +207,60 @@ Basic usage:
     #define TOCS tic_toc_diff_string(tic_timer)
 
 #else
+  #ifdef VIGRA_CPUTIME_TIMING
+        #include <ctime>
+        namespace {
 
+        inline double tic_toc_diff_num(clock_t const & tic)
+        {
+            const clock_t toc = clock() - tic;           
+            return toc * 1000.0 / CLOCKS_PER_SEC;
+        }
+
+        inline std::string tic_toc_diff_string(clock_t const & tic)
+        {
+            double diff = tic_toc_diff_num(tic); 
+            std::stringstream s;
+            s << diff << " msec";
+            return s.str();
+        }
+
+        inline void tic_toc_diff(clock_t const & tic)
+        {
+            std::cerr << tic_toc_diff_string(tic) << std::endl;
+        }
+        
+        inline double tic_toc_diff_num(std::vector<clock_t> & tic)
+        {
+            double res = tic_toc_diff_num(tic.back());
+            tic.pop_back();
+            return res;
+        }
+
+        inline std::string tic_toc_diff_string(std::vector<clock_t> & tic)
+        {
+            std::string res = tic_toc_diff_string(tic.back());
+            tic.pop_back();
+            return res;
+        }
+
+        inline void tic_toc_diff(std::vector<clock_t> & tic)
+        {
+            tic_toc_diff(tic.back());
+            tic.pop_back();
+        }
+
+        } // unnamed namespace
+
+        #define USETICTOC clock_t tic_timer;
+        #define TIC tic_timer = clock();
+        #define TOC  tic_toc_diff       (tic_timer);
+        #define TOCN tic_toc_diff_num   (tic_timer)
+        #define TOCS tic_toc_diff_string(tic_timer)
+        #define USE_NESTED_TICTOC std::vector<clock_t> tic_timer;
+        #define TICPUSH tic_timer.push_back(clock());
+
+  #else
     #if defined(VIGRA_HIRES_TIMING) && !defined(__CYGWIN__)
         // requires linking against librt
     
@@ -268,7 +321,6 @@ Basic usage:
                         clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &(tic_timer.back()));
 
     #else
-    
         #include <sys/time.h>
 
         namespace {
@@ -326,7 +378,7 @@ Basic usage:
                         gettimeofday(&(tic_timer.back()), NULL);
 
     #endif // VIGRA_HIRES_TIMING
-
+  #endif // VIGRA_CPUTIME_TIMING
 #endif // WIN32
 
 // TICTOCLOOP runs the body inner_repetitions times, and minimizes the result over a number of outer_repetitions runs,
@@ -334,7 +386,7 @@ Basic usage:
 #define TICTOCLOOP_BEGIN(inner_repetitions,outer_repetitions) \
     { \
     USETICTOC \
-        double tictoc_best_, tictoc_inner_repetitions_=inner_repetitions; size_t tictoc_outer_repetitions_=outer_repetitions; \
+        double tictoc_best_=0, tictoc_inner_repetitions_=inner_repetitions; size_t tictoc_outer_repetitions_=outer_repetitions; \
         for (size_t tictoccounter_=0; tictoccounter_<tictoc_outer_repetitions_; ++tictoccounter_) { \
         TIC \
         for (size_t tictocinnercounter_=0; tictocinnercounter_<inner_repetitions; ++tictocinnercounter_) { \
