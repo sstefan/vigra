@@ -564,7 +564,7 @@ public:
     {
         if(this == &rhs)
             return *this;
-        if(this->size_ == rhs.size_)
+        if((rhs.size_ > 0) && (this->size_ == rhs.size_))
             this->copyImpl(rhs);
         else
         {
