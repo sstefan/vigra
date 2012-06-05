@@ -201,7 +201,7 @@ public:
         <li> Take the candidate with least cost from the queue. If it has not
         already been merged, merge it with it's adjacent region.
 
-        <li> Put all candidates that are 4-adjacent to the pixel just processed
+        <li> Put all candidates that are 6-adjacent to the pixel just processed
         into the priority queue.
 
         </ol>
@@ -569,5 +569,5 @@ seededRegionGrowing3D(triple<SrcImageIterator, Shape, SrcAccessor> img1,
 
 } // namespace vigra
 
-#endif // VIGRA_SEEDEDREGIONGROWING_HXX
+#endif // VIGRA_SEEDEDREGIONGROWING_3D_HXX
 
