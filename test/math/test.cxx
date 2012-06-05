@@ -2771,6 +2771,11 @@ struct PolygonTest
 
 struct UnitTestShouldTest
 {
+    void testComparison() {
+	double data1 = 3.1511790813987019e-007;
+	double data2 = 3.9027656745832890e-007;
+	shouldEqualTolerance(data1, data2, 1e-4);
+    }
     void testSequenceComparison() {
 	double data1[1] = {3.1511790813987019e-007};
 	double data2[1] = {3.9027656745832890e-007};
@@ -2788,6 +2793,7 @@ struct MathTestSuite
         typedef vigra::Polynomial<double> P1;
         typedef vigra::StaticPolynomial<10, double> P2;
 
+        add( testCase((&UnitTestShouldTest::testComparison)));
         add( testCase((&UnitTestShouldTest::testSequenceComparison)));
 
         add( testCase((&PolynomialTest<0, P1>::testPolynomial)));
