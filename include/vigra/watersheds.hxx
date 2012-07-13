@@ -501,12 +501,16 @@ generateWatershedSeeds(SrcIterator upperlefts, SrcIterator lowerrights, SrcAcces
     }
     else
     {
+        LocalMinmaxOptions lm_options;
+        lm_options.neighborhood(Neighborhood::DirectionCount)
+                  .markWith(1.0)
+                  .allowAtBorder()
+                  .allowPlateaus(options.mini == SeedOptions::ExtendedMinima);
+        if(options.thresholdIsValid<SrcType>())
+            lm_options.threshold(options.thresh);
+            
         localMinima(srcIterRange(upperlefts, lowerrights, sa), destImage(seeds),
-            LocalMinmaxOptions().neighborhood(Neighborhood::DirectionCount)
-                                .markWith(1.0)
-                                .threshold(options.thresh)
-                                .allowAtBorder()
-                                .allowPlateaus(options.mini == SeedOptions::ExtendedMinima));
+                    lm_options);
     }
     
     return labelImageWithBackground(srcImageRange(seeds), destIter(upperleftd, da), 
@@ -653,7 +657,6 @@ watershedsUnionFind(SrcIterator upperlefts, SrcIterator lowerrights, SrcAccessor
                     Neighborhood neighborhood)
 {
     SImage orientationImage(lowerrights - upperlefts);
-    SImage::traverser yo = orientationImage.upperLeft();
 
     prepareWatersheds(upperlefts, lowerrights, sa,
                      orientationImage.upperLeft(), orientationImage.accessor(), neighborhood);
