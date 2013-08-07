@@ -834,7 +834,7 @@ class VectorAccessor
 
     This accessor is used when two images need to be treated as one
     because an algorithm accepts only one image. For example,
-    \ref seededRegionGrowing() uses only one image two calculate
+    \ref seededRegionGrowing() uses only one image to calculate
     the cost for aggregating each pixel into a region. Sometimes, we
     need more information to calculate this cost, for example gray value
     and local gradient magnitude. These values can be stored in two images,
