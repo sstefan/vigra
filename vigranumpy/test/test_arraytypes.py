@@ -45,7 +45,7 @@ import vigra.arraytypes as arraytypes
 import vigra.ufunc as ufunc
 import numpy, copy
 import vigranumpytest as vt
-from nose.tools import assert_equal, raises
+from nose.tools import assert_equal, raises, assert_true
 
 from vigra.arraytypes import AxisTags, AxisInfo
 
@@ -471,6 +471,19 @@ def testAxisTags():
     assert_equal(readBack[1].resolution, 3)
     assert_equal(readBack[2].resolution, 0.5)
     assert_equal(readBack[3].resolution, 4)
+    
+    import pickle
+    s = pickle.dumps(axistags)
+    unpickled = pickle.loads(s)
+    assert_equal(axistags, unpickled)
+    assert_equal(unpickled[0].description, "RGB")
+    assert_equal(unpickled[1].description, "time frequency")
+    assert_equal(unpickled[2].description, "")
+    assert_equal(unpickled[3].description, "confocal depth")
+    assert_equal(unpickled[0].resolution, 0)
+    assert_equal(unpickled[1].resolution, 3)
+    assert_equal(unpickled[2].resolution, 0.5)
+    assert_equal(unpickled[3].resolution, 4)
     
     # FIXME: add more tests here
     defaultTags = arraytypes.VigraArray.defaultAxistags('cxyt')
@@ -1113,8 +1126,8 @@ def testDeepcopy():
     assert_equal(b.flags.c_contiguous, a.flags.c_contiguous)
     assert_equal(b.flags.f_contiguous, a.flags.f_contiguous)
     assert_equal(b.axistags, a.axistags)
-    a[0,0,0] = 42
-    assert b[0,0,0] != 42
+    a[0,0,0] += 42
+    assert b[0,0,0] != a[0,0,0]
 
     a = arraytypes.RGBImage(numpy.random.random((4, 10, 3)), order='V')
     b = copy.deepcopy(a)
@@ -1122,8 +1135,8 @@ def testDeepcopy():
     assert_equal(b.flags.c_contiguous, a.flags.c_contiguous)
     assert_equal(b.flags.f_contiguous, a.flags.f_contiguous)
     assert_equal(b.axistags, a.axistags)
-    a[0,0,0] = 42
-    assert b[0,0,0] != 42
+    a[0,0,0] += 42
+    assert b[0,0,0] != a[0,0,0]
 
     a = arraytypes.RGBImage(numpy.random.random((3, 4, 10)), order='F')
     b = copy.deepcopy(a)
@@ -1131,8 +1144,8 @@ def testDeepcopy():
     assert_equal(b.flags.c_contiguous, a.flags.c_contiguous)
     assert_equal(b.flags.f_contiguous, a.flags.f_contiguous)
     assert_equal(b.axistags, a.axistags)
-    a[0,0,0] = 42
-    assert b[0,0,0] != 42
+    a[0,0,0] += 42
+    assert b[0,0,0] != a[0,0,0]
 
 def testDeepcopyWithAttributes():
     a = arraytypes.Image((320, 200), order='C')
@@ -1149,6 +1162,129 @@ def testDeepcopyWithCyclicReference():
     c = copy.deepcopy(a)
     assert hasattr(c, "myCustomAttribute")
     assert c.myCustomAttribute.backLink is c
+
+def testPickle():
+    import pickle
+    a = arraytypes.RGBImage(numpy.random.random((10, 4, 3)), order='C')
+    s = pickle.dumps(a)
+    b = pickle.loads(s)
+    assert_equal(b.shape, a.shape)
+    assert_equal(b.strides, a.strides)
+    assert_equal(b.axistags, a.axistags)
+    assert numpy.all(a == b)
+
+    a = arraytypes.RGBImage(numpy.random.random((4, 10, 3)), order='V')
+    s = pickle.dumps(a)
+    b = pickle.loads(s)
+    assert_equal(b.shape, a.shape)
+    assert_equal(b.strides, a.strides)
+    assert_equal(b.axistags, a.axistags)
+    assert numpy.all(a == b)
+
+    a = arraytypes.RGBImage(numpy.random.random((3, 4, 10)), order='F')
+    s = pickle.dumps(a)
+    b = pickle.loads(s)
+    assert_equal(b.shape, a.shape)
+    assert_equal(b.strides, a.strides)
+    assert_equal(b.axistags, a.axistags)
+    assert numpy.all(a == b)
+    
+def testZMQ():
+    try:
+        import zmq
+        ctx = zmq.Context.instance()
+        sender = zmq.Socket(ctx, zmq.PUSH)
+        receiver = zmq.Socket(ctx, zmq.PULL)
+        sender.bind('inproc://a')
+        receiver.connect('inproc://a')
+    except:
+        return
+        
+    a = arraytypes.RGBImage(numpy.random.random((10, 4, 3)), order='C')
+    a.sendSocket(sender, copy=False)
+    b = arraytypes.VigraArray.receiveSocket(receiver, copy=False)
+    assert_equal(b.shape, a.shape)
+    assert_equal(b.strides, a.strides)
+    assert_equal(b.axistags, a.axistags)
+    assert numpy.all(a == b)
+
+    a = arraytypes.RGBImage(numpy.random.random((4, 10, 3)), order='V')
+    a.sendSocket(sender, copy=False)
+    b = arraytypes.VigraArray.receiveSocket(receiver, copy=False)
+    assert_equal(b.shape, a.shape)
+    assert_equal(b.strides, a.strides)
+    assert_equal(b.axistags, a.axistags)
+    assert numpy.all(a == b)
+
+    a = arraytypes.RGBImage(numpy.random.random((3, 4, 10)), order='F')
+    a.sendSocket(sender, copy=False)
+    b = arraytypes.VigraArray.receiveSocket(receiver, copy=False)
+    assert_equal(b.shape, a.shape)
+    assert_equal(b.strides, a.strides)
+    assert_equal(b.axistags, a.axistags)
+    assert numpy.all(a == b)
+    
+def testSlicing():
+    a = arraytypes.Vector2Volume((5,4,3))
+    a.flat[...] = xrange(a.size)
+    
+    tags = arraytypes.VigraArray.defaultAxistags('xyzc')
+    assert_equal(tags, a.axistags)
+    
+    b = a[...]
+    assert_true((a==b).all())
+    assert_equal(tags, b.axistags)
+    
+    b = a[...,0]
+    assert_equal(b.shape, a.shape[:-1])
+    assert_equal(b.axistags, arraytypes.VigraArray.defaultAxistags('xyz'))
+    assert_equal(b[3,2,1], a[3,2,1,0])
+    
+    b = a[1,...]
+    assert_equal(b.shape, a.shape[1:])
+    assert_equal(b.axistags, arraytypes.VigraArray.defaultAxistags('yzc'))
+    assert_equal(b[3,2,1], a[1,3,2,1])
+    
+    b = a[:,2,...]
+    assert_equal(b.shape, (5,3,2))
+    assert_equal(b.axistags, arraytypes.VigraArray.defaultAxistags('xzc'))
+    assert_equal(b[3,2,1], a[3,2,2,1])
+    
+    b = a[:,1,2,...]
+    assert_equal(b.shape, (5,2))
+    assert_equal(b.axistags, arraytypes.VigraArray.defaultAxistags('xc'))
+    assert_equal(b[2,1], a[2,1,2,1])
+    
+    b = a[2:4, :, 2, ...]
+    assert_equal(b.shape, (2, 4, 2))
+    assert_equal(b.axistags, arraytypes.VigraArray.defaultAxistags('xyc'))
+    assert_equal(b[0,2,1], a[2,2,2,1])
+    
+    b = a[1:4, :, arraytypes.newaxis(arraytypes.AxisInfo.t), 1, ...]
+    assert_equal(b.shape, (3, 4, 1, 2))
+    assert_equal(b.axistags, arraytypes.VigraArray.defaultAxistags('xytc'))
+    assert_equal(b[0,2,0,0], a[1,2,1,0])
+    
+    b = a[..., None, :,1]
+    assert_equal(b.shape, (5, 4, 1, 3))
+    rtags = arraytypes.AxisTags(arraytypes.AxisInfo.x, arraytypes.AxisInfo.y, arraytypes.AxisInfo(), arraytypes.AxisInfo.z) 
+    assert_equal(b.axistags, rtags)
+    assert_equal(b[0,3,0,1], a[0,3,1,1])
+    
+    b = a.subarray((4,3,2))
+    assert_equal(b.shape, (4,3,2,2))
+    assert_true((a[:4,:3,:2,:]==b).all())
+    assert_equal(tags, b.axistags)
+    
+    b = a.subarray((1,1,1),(4,3,2))
+    assert_equal(b.shape, (3,2,1,2))
+    assert_true((a[1:4,1:3,1:2]==b).all())
+    assert_equal(tags, b.axistags)
+    
+    b = a.subarray((1,1,1,1),(4,3,2,2))
+    assert_equal(b.shape, (3,2,1,1))
+    assert_true((a[1:4,1:3,1:2,1:]==b).all())
+    assert_equal(tags, b.axistags)
 
 def testMethods():
     a = arraytypes.ScalarImage((20, 30))

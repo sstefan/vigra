@@ -72,11 +72,18 @@
 
 #include "impex.hxx"
 #include "multi_array.hxx"
+#include "multi_iterator_coupled.hxx"
 #include "multi_impex.hxx"
 #include "utilities.hxx"
 #include "error.hxx"
 
 #include <algorithm>
+
+#if defined(_MSC_VER)
+#  include <io.h>
+#else
+#  include <unistd.h>
+#endif
 
 namespace vigra {
 
@@ -88,13 +95,24 @@ namespace vigra {
 */
 //@{
 
+    /** \brief Check if given filename refers to a HDF5 file.
+    */
+inline bool isHDF5(char const * filename)
+{
+#ifdef _MSC_VER
+    return _access(filename, 0) != -1 && H5Fis_hdf5(filename);
+#else
+    return access(filename, F_OK) == 0 && H5Fis_hdf5(filename);
+#endif
+}
+
     /** \brief Wrapper for hid_t objects.
 
     Newly created or opened HDF5 handles are usually stored as objects of type 'hid_t'. When the handle
     is no longer needed, the appropriate close function must be called. However, if a function is 
     aborted by an exception, this is difficult to ensure. Class HDF5Handle is a smart pointer that 
     solves this problem by calling the close function in the destructor (This is analogous to how 
-    std::auto_ptr calls 'delete' on the contained pointer). A pointer to the close function must be 
+    VIGRA_UNIQUE_PTR calls 'delete' on the contained pointer). A pointer to the close function must be 
     passed to the constructor, along with an error message that is raised when creation/opening fails. 
     
     Since HDF5Handle objects are convertible to hid_t, they can be used in the code in place 
@@ -160,7 +178,7 @@ public:
     }
 
         /** \brief Copy constructor.
-            Hands over ownership of the RHS handle (analogous to std::auto_ptr).
+            Hands over ownership of the RHS handle (analogous to VIGRA_UNIQUE_PTR).
         */
     HDF5Handle(HDF5Handle const & h)
     : handle_( h.handle_ ),
@@ -171,7 +189,7 @@ public:
     
         /** \brief Assignment.
             Calls close() for the LHS handle and hands over ownership of the 
-            RHS handle (analogous to std::auto_ptr).
+            RHS handle (analogous to VIGRA_UNIQUE_PTR).
         */
     HDF5Handle & operator=(HDF5Handle const & h)
     {
@@ -254,7 +272,6 @@ public:
     }
 };
 
-
 /********************************************************/
 /*                                                      */
 /*                   HDF5ImportInfo                     */
@@ -312,6 +329,12 @@ class HDF5ImportInfo
     VIGRA_EXPORT MultiArrayIndex numDimensions() const;
 
         /** Get the shape of the dataset represented by this info object.
+            
+            Note that the memory order between VIGRA and HDF5 files differs: VIGRA uses 
+            Fortran-order, while HDF5 uses C-order. This function therefore reverses the axis
+            order relative to the file contents. That is, when the axes in the file are 
+            ordered as 'z', 'y', 'x', this function will return the shape in the order
+            'x', 'y', 'z'.
          */
     VIGRA_EXPORT ArrayVector<hsize_t> const & shape() const
     {
@@ -319,6 +342,12 @@ class HDF5ImportInfo
     }
 
         /** Get the shape (length) of the dataset along dimension \a dim.
+            
+            Note that the memory order between VIGRA and HDF5 files differs: VIGRA uses 
+            Fortran-order, while HDF5 uses C-order. This function therefore reverses the axis
+            order relative to the file contents. That is, when the axes in the file are 
+            ordered as 'z', 'y', 'x', this function will return the shape in the order
+            'x', 'y', 'z'.
          */
     VIGRA_EXPORT MultiArrayIndex shapeOfDimension(const int dim) const;
 
@@ -326,11 +355,14 @@ class HDF5ImportInfo
 
             Possible values are:
             <DL>
+            <DT>"INT8"<DD> 8-bit signed integer (unsigned char)
             <DT>"UINT8"<DD> 8-bit unsigned integer (unsigned char)
             <DT>"INT16"<DD> 16-bit signed integer (short)
             <DT>"UINT16"<DD> 16-bit unsigned integer (unsigned short)
             <DT>"INT32"<DD> 32-bit signed integer (long)
             <DT>"UINT32"<DD> 32-bit unsigned integer (unsigned long)
+            <DT>"INT64"<DD> 64-bit signed integer (long long)
+            <DT>"UINT64"<DD> 64-bit unsigned integer (unsigned long long)
             <DT>"FLOAT"<DD> 32-bit floating point (float)
             <DT>"DOUBLE"<DD> 64-bit floating point (double)
             </DL>
@@ -400,11 +432,41 @@ inline hid_t getH5DataType<const char*>()
 }
 #undef VIGRA_H5_DATATYPE
 
+template <unsigned int SIZE>
+struct HDF5TypeBySize;
+
+template <>
+struct HDF5TypeBySize<1>
+{
+    static hid_t signed_type() { return H5T_NATIVE_INT8; }
+    static hid_t unsigned_type() { return H5T_NATIVE_UINT8; }
+};
+
+template <>
+struct HDF5TypeBySize<2>
+{
+    static hid_t signed_type() { return H5T_NATIVE_INT16; }
+    static hid_t unsigned_type() { return H5T_NATIVE_UINT16; }
+};
+
+template <>
+struct HDF5TypeBySize<4>
+{
+    static hid_t signed_type() { return H5T_NATIVE_INT32; }
+    static hid_t unsigned_type() { return H5T_NATIVE_UINT32; }
+};
+
+template <>
+struct HDF5TypeBySize<8>
+{
+    static hid_t signed_type() { return H5T_NATIVE_INT64; }
+    static hid_t unsigned_type() { return H5T_NATIVE_UINT64; }
+};
+
 #define VIGRA_H5_SIGNED_DATATYPE(type) \
 template<> \
 inline hid_t getH5DataType<type>() \
-{ static hid_t types[] = {0, H5T_NATIVE_INT8, H5T_NATIVE_INT16, 0, H5T_NATIVE_INT32, 0,0,0,H5T_NATIVE_INT64}; \
-  return types[sizeof(type)];}
+{ return HDF5TypeBySize<sizeof(type)>::signed_type(); }
 
 VIGRA_H5_SIGNED_DATATYPE(signed char)
 VIGRA_H5_SIGNED_DATATYPE(signed short)
@@ -417,8 +479,7 @@ VIGRA_H5_SIGNED_DATATYPE(signed long long)
 #define VIGRA_H5_UNSIGNED_DATATYPE(type) \
 template<> \
 inline hid_t getH5DataType<type>() \
-{ static hid_t types[] = {0, H5T_NATIVE_UINT8, H5T_NATIVE_UINT16, 0, H5T_NATIVE_UINT32, 0,0,0,H5T_NATIVE_UINT64}; \
-  return types[sizeof(type)];}
+{ return HDF5TypeBySize<sizeof(type)>::unsigned_type(); }
 
 VIGRA_H5_UNSIGNED_DATATYPE(unsigned char)
 VIGRA_H5_UNSIGNED_DATATYPE(unsigned short)
@@ -476,6 +537,11 @@ string attributes can be attached to any dataset or group. Group- or dataset-han
 are encapsulated in the class and managed automatically. The internal file-system like
 structure can be accessed by functions like "cd()" or "mkdir()".
 
+Note that the memory order between VIGRA and HDF5 files differs: VIGRA uses 
+Fortran-order, while HDF5 uses C-order. This means that a VIGRA MultiArray,
+whose indices represent the 'x'-, 'y'-, and 'z'-axis in that order, is reversed
+upon writing to an HDF5 file, i.e. in the file the axis order is 'z', 'y', 'x'. 
+Likewise, the order is reversed upon reading.
 
 <b>Example:</b>
 Write the MultiArray out_multi_array to file. Change the current directory to
@@ -547,7 +613,8 @@ class HDF5File
         */
     enum OpenMode {
         New,           // Create new empty file (existing file will be deleted).
-        Open           // Open file. Create if not existing.
+        Open,          // Open file. Create if not existing.
+        OpenReadOnly   // Open file in read-only mode.
     };
 
         /** \brief Default constructor.
@@ -626,20 +693,7 @@ class HDF5File
          */
     inline void cd(std::string groupName)
     {
-        std::string message = "HDF5File::cd(): Could not open group '" + groupName + "'.\n";
-
-        // make groupName clean
-        groupName = get_absolute_path(groupName);
-
-        if(groupName == "/")
-        {
-            cGroupHandle_ = HDF5Handle(openCreateGroup_("/"),&H5Gclose,message.c_str());
-        }
-        else
-        {
-            vigra_precondition(H5Lexists(fileHandle_, groupName.c_str(), H5P_DEFAULT) != 0, message);
-            cGroupHandle_ = HDF5Handle(openCreateGroup_(groupName),&H5Gclose,message.c_str());
-        }
+        cGroupHandle_ = getGroupHandle(groupName, "HDF5File::cd()");
     }
 
         /** \brief Change the current group to its parent group.
@@ -767,11 +821,20 @@ class HDF5File
         return fileName_();
     }
 
+        /** \brief Check if given datasetName exists.
+        */
+    inline bool existsDataset(std::string datasetName)
+    {
+        // make datasetName clean
+        datasetName = get_absolute_path(datasetName);
+        return (H5Lexists(fileHandle_, datasetName.c_str(), H5P_DEFAULT) > 0);
+    }
+
         /** \brief Get the number of dimensions of a certain dataset
              If the first character is a "/", the path will be interpreted as absolute path,
              otherwise it will be interpreted as path relative to the current group.
         */
-    inline hssize_t getDatasetDimensions(std::string datasetName)
+    hssize_t getDatasetDimensions(std::string datasetName)
     {
         // make datasetName clean
         datasetName = get_absolute_path(datasetName);
@@ -788,12 +851,19 @@ class HDF5File
     }
 
         /** \brief Get the shape of each dimension of a certain dataset.
-             Normally, this function is called after determining the dimension of the
-             dataset using \ref getDatasetDimensions().
-             If the first character is a "/", the path will be interpreted as absolute path,
-             otherwise it will be interpreted as path relative to the current group.
+            
+           Normally, this function is called after determining the dimension of the
+            dataset using \ref getDatasetDimensions().
+            If the first character is a "/", the path will be interpreted as absolute path,
+            otherwise it will be interpreted as path relative to the current group.
+            
+            Note that the memory order between VIGRA and HDF5 files differs: VIGRA uses 
+            Fortran-order, while HDF5 uses C-order. This function therefore reverses the axis
+            order relative to the file contents. That is, when the axes in the file are 
+            ordered as 'z', 'y', 'x', this function will return the shape in the order
+            'x', 'y', 'z'.
         */
-    inline ArrayVector<hsize_t> getDatasetShape(std::string datasetName)
+    ArrayVector<hsize_t> getDatasetShape(std::string datasetName)
     {
         // make datasetName clean
         datasetName = get_absolute_path(datasetName);
@@ -817,25 +887,86 @@ class HDF5File
         return shape;
     }
 
+        /** Query the pixel type of the dataset.
+
+            Possible values are:
+            <DL>
+            <DT>"INT8"<DD> 8-bit signed integer (unsigned char)
+            <DT>"UINT8"<DD> 8-bit unsigned integer (unsigned char)
+            <DT>"INT16"<DD> 16-bit signed integer (short)
+            <DT>"UINT16"<DD> 16-bit unsigned integer (unsigned short)
+            <DT>"INT32"<DD> 32-bit signed integer (long)
+            <DT>"UINT32"<DD> 32-bit unsigned integer (unsigned long)
+            <DT>"INT64"<DD> 64-bit signed integer (long long)
+            <DT>"UINT64"<DD> 64-bit unsigned integer (unsigned long long)
+            <DT>"FLOAT"<DD> 32-bit floating point (float)
+            <DT>"DOUBLE"<DD> 64-bit floating point (double)
+            <DT>"UNKNOWN"<DD> any other type
+            </DL>
+         */
+    std::string getDatasetType(std::string const & datasetName)
+    {
+        HDF5Handle datasetHandle = getDatasetHandle(datasetName);
+
+        hid_t datatype = H5Dget_type(datasetHandle);
+        H5T_class_t dataclass = H5Tget_class(datatype);
+        size_t datasize  = H5Tget_size(datatype);
+        H5T_sign_t datasign  = H5Tget_sign(datatype);
+
+        if(dataclass == H5T_FLOAT)
+        {
+            if(datasize == 4)
+                return "FLOAT";
+            else if(datasize == 8)
+                return "DOUBLE";
+        }
+        else if(dataclass == H5T_INTEGER)   
+        {
+            if(datasign == H5T_SGN_NONE)
+            {
+                if(datasize ==  1)
+                    return "UINT8";
+                else if(datasize == 2)
+                    return "UINT16";
+                else if(datasize == 4)
+                    return "UINT32";
+                else if(datasize == 8)
+                    return "UINT64";
+            }
+            else
+            {
+                if(datasize ==  1)
+                    return "INT8";
+                else if(datasize == 2)
+                    return "INT16";
+                else if(datasize == 4)
+                    return "INT32";
+                else if(datasize == 8)
+                    return "INT64";
+            }
+        }
+        return "UNKNOWN";
+    }
+        
         /** \brief Obtain the HDF5 handle of a dataset.
         */
-    inline HDF5Handle getDatasetHandle(std::string dataset_name)
+    inline HDF5Handle getDatasetHandle(std::string const & datasetName)
     {
-        std::string errorMessage = "HDF5File::getDatasetHandle(): Unable to open dataset '" + dataset_name + "'.";
-        return HDF5Handle(getDatasetHandle_(dataset_name), &H5Dclose, errorMessage.c_str());
+        std::string errorMessage = "HDF5File::getDatasetHandle(): Unable to open dataset '" + datasetName + "'.";
+        return HDF5Handle(getDatasetHandle_(get_absolute_path(datasetName)), &H5Dclose, errorMessage.c_str());
     }
 
         /** \brief Obtain the HDF5 handle of a group.
          */
-    inline HDF5Handle getGroupHandle(std::string group_name)
+    inline HDF5Handle getGroupHandle(std::string group_name, std::string function_name = "HDF5File::getGroupHandle()")
     {
-        std::string errorMessage = "HDF5File::getGroupHandle(): Group '" + group_name + "' not found.";
+        std::string errorMessage = function_name + ": Group '" + group_name + "' not found.";
 
         // make group_name clean
         group_name = get_absolute_path(group_name);
 
         // group must exist
-        vigra_precondition(H5Lexists(fileHandle_, group_name.c_str(), H5P_DEFAULT) == 1, 
+        vigra_precondition(group_name == "/" || H5Lexists(fileHandle_, group_name.c_str(), H5P_DEFAULT) != 0, 
                            errorMessage.c_str());
 
         // open group and return group handle
@@ -856,8 +987,10 @@ class HDF5File
         /** \brief Write MultiArray Attributes.
           * In contrast to datasets, subarray access, chunks and compression are not available.
           */
-    template<unsigned int N, class T>
-    inline void writeAttribute(std::string object_name, std::string attribute_name, const MultiArrayView<N, T, UnstridedArrayTag> & array)
+    template<unsigned int N, class T, class Stride>
+    inline void writeAttribute(std::string object_name, 
+                               std::string attribute_name, 
+                               const MultiArrayView<N, T, Stride> & array)
     {
         // make object_name clean
         object_name = get_absolute_path(object_name);
@@ -865,8 +998,10 @@ class HDF5File
         write_attribute_(object_name, attribute_name, array, detail::getH5DataType<T>(), 1);
     }
 
-    template<unsigned int N, class T, int SIZE>
-    inline void writeAttribute(std::string datasetName, std::string attributeName, const MultiArrayView<N, TinyVector<T, SIZE>, UnstridedArrayTag> & array)
+    template<unsigned int N, class T, int SIZE, class Stride>
+    inline void writeAttribute(std::string datasetName, 
+                               std::string attributeName, 
+                               const MultiArrayView<N, TinyVector<T, SIZE>, Stride> & array)
     {
         // make datasetName clean
         datasetName = get_absolute_path(datasetName);
@@ -874,8 +1009,10 @@ class HDF5File
         write_attribute_(datasetName, attributeName, array, detail::getH5DataType<T>(), SIZE);
     }
 
-    template<unsigned int N, class T>
-    inline void writeAttribute(std::string datasetName, std::string attributeName, const MultiArrayView<N, RGBValue<T>, UnstridedArrayTag> & array)
+    template<unsigned int N, class T, class Stride>
+    inline void writeAttribute(std::string datasetName, 
+                               std::string attributeName, 
+                               const MultiArrayView<N, RGBValue<T>, Stride> & array)
     {
         // make datasetName clean
         datasetName = get_absolute_path(datasetName);
@@ -937,8 +1074,10 @@ class HDF5File
         /** \brief Read MultiArray Attributes.
           * In contrast to datasets, subarray access is not available.
           */
-    template<unsigned int N, class T>
-    inline void readAttribute(std::string object_name, std::string attribute_name, const MultiArrayView<N, T, UnstridedArrayTag> & array)
+    template<unsigned int N, class T, class Stride>
+    inline void readAttribute(std::string object_name, 
+                              std::string attribute_name, 
+                              MultiArrayView<N, T, Stride> array)
     {
         // make object_name clean
         object_name = get_absolute_path(object_name);
@@ -946,8 +1085,10 @@ class HDF5File
         read_attribute_(object_name, attribute_name, array, detail::getH5DataType<T>(), 1);
     }
 
-    template<unsigned int N, class T, int SIZE>
-    inline void readAttribute(std::string datasetName, std::string attributeName, const MultiArrayView<N, TinyVector<T, SIZE>, UnstridedArrayTag> & array)
+    template<unsigned int N, class T, int SIZE, class Stride>
+    inline void readAttribute(std::string datasetName, 
+                              std::string attributeName, 
+                              MultiArrayView<N, TinyVector<T, SIZE>, Stride> array)
     {
         // make datasetName clean
         datasetName = get_absolute_path(datasetName);
@@ -955,8 +1096,10 @@ class HDF5File
         read_attribute_(datasetName, attributeName, array, detail::getH5DataType<T>(), SIZE);
     }
 
-    template<unsigned int N, class T>
-    inline void readAttribute(std::string datasetName, std::string attributeName, const MultiArrayView<N, RGBValue<T>, UnstridedArrayTag> & array)
+    template<unsigned int N, class T, class Stride>
+    inline void readAttribute(std::string datasetName, 
+                              std::string attributeName, 
+                              MultiArrayView<N, RGBValue<T>, Stride> array)
     {
         // make datasetName clean
         datasetName = get_absolute_path(datasetName);
@@ -1005,7 +1148,11 @@ class HDF5File
             Chunks can be activated by setting 
             \code iChunkSize = size; //size \> 0 
             \endcode .
-            The chunks will be hypercubes with edge length size.
+            The chunks will be hypercubes with edge length size. When <tt>iChunkSize == 0</tt>
+            (default), the behavior depends on the <tt>compression</tt> setting: If no
+            compression is requested, the data is written without chunking. Otherwise,
+            chuning is required, and the chunk size is automatically selected such that
+            each chunk contains about 300k pixels.
 
             Compression can be activated by setting 
             \code compression = parameter; // 0 \< parameter \<= 9 
@@ -1014,15 +1161,22 @@ class HDF5File
 
             If the first character of datasetName is a "/", the path will be interpreted as absolute path,
             otherwise it will be interpreted as path relative to the current group.
+
+            Note that the memory order between VIGRA and HDF5 files differs: VIGRA uses 
+            Fortran-order, while HDF5 uses C-order. This means that a VIGRA MultiArray,
+            whose indices represent the 'x'-, 'y'-, and 'z'-axis in that order, is reversed
+            upon writing to an HDF5 file, i.e. in the file the axis order is 'z', 'y', 'x'. 
         */
-    template<unsigned int N, class T>
-    inline void write(std::string datasetName, const MultiArrayView<N, T, UnstridedArrayTag> & array, int iChunkSize = 0, int compression = 0)
+    template<unsigned int N, class T, class Stride>
+    inline void write(std::string datasetName, 
+                      const MultiArrayView<N, T, Stride> & array, 
+                      int iChunkSize = 0, int compression = 0)
     {
         // make datasetName clean
         datasetName = get_absolute_path(datasetName);
 
         typename MultiArrayShape<N>::type chunkSize;
-        for(int i = 0; i < N; i++){
+        for(unsigned int i = 0; i < N; i++){
             chunkSize[i] = iChunkSize;
         }
         write_(datasetName, array, detail::getH5DataType<T>(), 1, chunkSize, compression);
@@ -1039,9 +1193,16 @@ class HDF5File
 
             If the first character of datasetName is a "/", the path will be interpreted as absolute path,
             otherwise it will be interpreted as path relative to the current group.
+
+            Note that the memory order between VIGRA and HDF5 files differs: VIGRA uses 
+            Fortran-order, while HDF5 uses C-order. This means that a VIGRA MultiArray,
+            whose indices represent the 'x'-, 'y'-, and 'z'-axis in that order, is reversed
+            upon writing to an HDF5 file, i.e. in the file the axis order is 'z', 'y', 'x'. 
         */
-    template<unsigned int N, class T>
-    inline void write(std::string datasetName, const MultiArrayView<N, T, UnstridedArrayTag> & array, typename MultiArrayShape<N>::type chunkSize, int compression = 0)
+    template<unsigned int N, class T, class Stride>
+    inline void write(std::string datasetName, 
+                      const MultiArrayView<N, T, Stride> & array, 
+                      typename MultiArrayShape<N>::type chunkSize, int compression = 0)
     {
         // make datasetName clean
         datasetName = get_absolute_path(datasetName);
@@ -1052,19 +1213,18 @@ class HDF5File
         /** \brief Write a multi array into a larger volume.
             blockOffset determines the position, where array is written.
 
-            Chunks can be activated by providing a MultiArrayShape as chunkSize.
-            chunkSize must have equal dimension as array.
-
-            Compression can be activated by setting 
-            \code compression = parameter; // 0 \< parameter \<= 9 
-            \endcode
-            where 0 stands for no compression and 9 for maximum compression.
-
             If the first character of datasetName is a "/", the path will be interpreted as absolute path,
             otherwise it will be interpreted as path relative to the current group.
+
+            Note that the memory order between VIGRA and HDF5 files differs: VIGRA uses 
+            Fortran-order, while HDF5 uses C-order. This means that a VIGRA MultiArray,
+            whose indices represent the 'x'-, 'y'-, and 'z'-axis in that order, is reversed
+            upon writing to an HDF5 file, i.e. in the file the axis order is 'z', 'y', 'x'. 
         */
-    template<unsigned int N, class T>
-    inline void writeBlock(std::string datasetName, typename MultiArrayShape<N>::type blockOffset, const MultiArrayView<N, T, UnstridedArrayTag> & array)
+    template<unsigned int N, class T, class Stride>
+    inline void writeBlock(std::string datasetName, 
+                           typename MultiArrayShape<N>::type blockOffset, 
+                           const MultiArrayView<N, T, Stride> & array)
     {
         // make datasetName clean
         datasetName = get_absolute_path(datasetName);
@@ -1073,8 +1233,10 @@ class HDF5File
     }
 
     // non-scalar (TinyVector) and unstrided multi arrays
-    template<unsigned int N, class T, int SIZE>
-    inline void write(std::string datasetName, const MultiArrayView<N, TinyVector<T, SIZE>, UnstridedArrayTag> & array, int iChunkSize = 0, int compression = 0)
+    template<unsigned int N, class T, int SIZE, class Stride>
+    inline void write(std::string datasetName, 
+                      const MultiArrayView<N, TinyVector<T, SIZE>, Stride> & array, 
+                      int iChunkSize = 0, int compression = 0)
     {
         // make datasetName clean
         datasetName = get_absolute_path(datasetName);
@@ -1086,8 +1248,10 @@ class HDF5File
         write_(datasetName, array, detail::getH5DataType<T>(), SIZE, chunkSize, compression);
     }
 
-    template<unsigned int N, class T, int SIZE>
-    inline void write(std::string datasetName, const MultiArrayView<N, TinyVector<T, SIZE>, UnstridedArrayTag> & array, typename MultiArrayShape<N>::type chunkSize, int compression = 0)
+    template<unsigned int N, class T, int SIZE, class Stride>
+    inline void write(std::string datasetName, 
+                      const MultiArrayView<N, TinyVector<T, SIZE>, Stride> & array, 
+                      typename MultiArrayShape<N>::type chunkSize, int compression = 0)
     {
         // make datasetName clean
         datasetName = get_absolute_path(datasetName);
@@ -1116,8 +1280,10 @@ class HDF5File
         write(datasetName, m_array, compression);
     }
 
-    template<unsigned int N, class T, int SIZE>
-    inline void writeBlock(std::string datasetName, typename MultiArrayShape<N>::type blockOffset, const MultiArrayView<N, TinyVector<T, SIZE>, UnstridedArrayTag> & array)
+    template<unsigned int N, class T, int SIZE, class Stride>
+    inline void writeBlock(std::string datasetName, 
+                           typename MultiArrayShape<N>::type blockOffset, 
+                           const MultiArrayView<N, TinyVector<T, SIZE>, Stride> & array)
     {
         // make datasetName clean
         datasetName = get_absolute_path(datasetName);
@@ -1126,8 +1292,10 @@ class HDF5File
     }
 
     // non-scalar (RGBValue) and unstrided multi arrays
-    template<unsigned int N, class T>
-    inline void write(std::string datasetName, const MultiArrayView<N, RGBValue<T>, UnstridedArrayTag> & array, int iChunkSize = 0, int compression = 0)
+    template<unsigned int N, class T, class Stride>
+    inline void write(std::string datasetName, 
+                      const MultiArrayView<N, RGBValue<T>, Stride> & array, 
+                      int iChunkSize = 0, int compression = 0)
     {
         // make datasetName clean
         datasetName = get_absolute_path(datasetName);
@@ -1139,8 +1307,10 @@ class HDF5File
         write_(datasetName, array, detail::getH5DataType<T>(), 3, chunkSize, compression);
     }
 
-    template<unsigned int N, class T>
-    inline void write(std::string datasetName, const MultiArrayView<N, RGBValue<T>, UnstridedArrayTag> & array, typename MultiArrayShape<N>::type chunkSize, int compression = 0)
+    template<unsigned int N, class T, class Stride>
+    inline void write(std::string datasetName, 
+                      const MultiArrayView<N, RGBValue<T>, Stride> & array, 
+                      typename MultiArrayShape<N>::type chunkSize, int compression = 0)
     {
         // make datasetName clean
         datasetName = get_absolute_path(datasetName);
@@ -1148,8 +1318,10 @@ class HDF5File
         write_(datasetName, array, detail::getH5DataType<T>(), 3, chunkSize, compression);
     }
 
-    template<unsigned int N, class T>
-    inline void writeBlock(std::string datasetName, typename MultiArrayShape<N>::type blockOffset, const MultiArrayView<N, RGBValue<T>, UnstridedArrayTag> & array)
+    template<unsigned int N, class T, class Stride>
+    inline void writeBlock(std::string datasetName, 
+                           typename MultiArrayShape<N>::type blockOffset, 
+                           const MultiArrayView<N, RGBValue<T>, Stride> & array)
     {
         // make datasetName clean
         datasetName = get_absolute_path(datasetName);
@@ -1178,13 +1350,18 @@ class HDF5File
     inline void write(std::string datasetName, std::string const & data) { writeAtomic(datasetName,data.c_str()); }
 
     // Reading data
-
+    
         /** \brief Read data into a multi array.
-          If the first character of datasetName is a "/", the path will be interpreted as absolute path,
-          otherwise it will be interpreted as path relative to the current group.
+            If the first character of datasetName is a "/", the path will be interpreted as absolute path,
+            otherwise it will be interpreted as path relative to the current group.
+
+            Note that the memory order between VIGRA and HDF5 files differs: VIGRA uses 
+            Fortran-order, while HDF5 uses C-order. This means that a HDF5 dataset,
+            whose indices represent the 'z'-, 'y'-, and 'x'-axis in that order, is reversed
+            upon reading into a MultiArrayView, i.e. in the array axis order must be 'x', 'y', 'z'. 
         */
-    template<unsigned int N, class T>
-    inline void read(std::string datasetName, MultiArrayView<N, T, UnstridedArrayTag> & array)
+    template<unsigned int N, class T, class Stride>
+    inline void read(std::string datasetName, MultiArrayView<N, T, Stride> array)
     {
         // make datasetName clean
         datasetName = get_absolute_path(datasetName);
@@ -1195,9 +1372,14 @@ class HDF5File
         /** \brief Read data into a MultiArray. Resize MultiArray to the correct size.
             If the first character of datasetName is a "/", the path will be interpreted as absolute path,
             otherwise it will be interpreted as path relative to the current group.
+
+            Note that the memory order between VIGRA and HDF5 files differs: VIGRA uses 
+            Fortran-order, while HDF5 uses C-order. This means that a HDF5 dataset,
+            whose indices represent the 'z'-, 'y'-, and 'x'-axis in that order, is reversed
+            upon reading into a MultiArray, i.e. in the array axis order will be 'x', 'y', 'z'. 
         */
-    template<unsigned int N, class T>
-    inline void readAndResize(std::string datasetName, MultiArray<N, T> & array)
+    template<unsigned int N, class T, class Alloc>
+    inline void readAndResize(std::string datasetName, MultiArray<N, T, Alloc> & array)
     {
         // make datasetName clean
         datasetName = get_absolute_path(datasetName);
@@ -1223,7 +1405,7 @@ class HDF5File
           otherwise it will be interpreted as path relative to the current group.
         */
     template<class T>
-    inline void read(const std::string & datasetName, ArrayVectorView<T> & array)
+    inline void read(const std::string & datasetName, ArrayVectorView<T> array)
     {
         // convert to a (trivial) MultiArrayView and forward.
         MultiArrayShape<1>::type shape(array.size());
@@ -1267,9 +1449,17 @@ class HDF5File
 
             If the first character of datasetName is a "/", the path will be interpreted as absolute path,
             otherwise it will be interpreted as path relative to the current group.
+
+            Note that the memory order between VIGRA and HDF5 files differs: VIGRA uses 
+            Fortran-order, while HDF5 uses C-order. This means that a HDF5 dataset,
+            whose indices represent the 'z'-, 'y'-, and 'x'-axis in that order, is reversed
+            upon reading into a MultiArray, i.e. in the array axis order will be 'x', 'y', 'z'. 
         */
-    template<unsigned int N, class T>
-    inline void readBlock(std::string datasetName, typename MultiArrayShape<N>::type blockOffset, typename MultiArrayShape<N>::type blockShape, MultiArrayView<N, T, UnstridedArrayTag> & array)
+    template<unsigned int N, class T, class Stride>
+    inline void readBlock(std::string datasetName, 
+                          typename MultiArrayShape<N>::type blockOffset, 
+                          typename MultiArrayShape<N>::type blockShape, 
+                          MultiArrayView<N, T, Stride> array)
     {
         // make datasetName clean
         datasetName = get_absolute_path(datasetName);
@@ -1278,8 +1468,8 @@ class HDF5File
     }
 
     // non-scalar (TinyVector) and unstrided target MultiArrayView
-    template<unsigned int N, class T, int SIZE>
-    inline void read(std::string datasetName, MultiArrayView<N, TinyVector<T, SIZE>, UnstridedArrayTag> & array)
+    template<unsigned int N, class T, int SIZE, class Stride>
+    inline void read(std::string datasetName, MultiArrayView<N, TinyVector<T, SIZE>, Stride> array)
     {
         // make datasetName clean
         datasetName = get_absolute_path(datasetName);
@@ -1288,8 +1478,8 @@ class HDF5File
     }
 
     // non-scalar (TinyVector) MultiArray
-    template<unsigned int N, class T, int SIZE>
-    inline void readAndResize(std::string datasetName, MultiArray<N, TinyVector<T, SIZE> > & array)
+    template<unsigned int N, class T, int SIZE, class Alloc>
+    inline void readAndResize(std::string datasetName, MultiArray<N, TinyVector<T, SIZE>, Alloc> & array)
     {
         // make datasetName clean
         datasetName = get_absolute_path(datasetName);
@@ -1311,8 +1501,11 @@ class HDF5File
         read_(datasetName, array, detail::getH5DataType<T>(), SIZE);
     }
 
-    template<unsigned int N, class T, int SIZE>
-    inline void readBlock(std::string datasetName, typename MultiArrayShape<N>::type blockOffset, typename MultiArrayShape<N>::type blockShape, MultiArrayView<N, TinyVector<T, SIZE>, UnstridedArrayTag> & array)
+    template<unsigned int N, class T, int SIZE, class Stride>
+    inline void readBlock(std::string datasetName, 
+                          typename MultiArrayShape<N>::type blockOffset, 
+                          typename MultiArrayShape<N>::type blockShape, 
+                          MultiArrayView<N, TinyVector<T, SIZE>, Stride> array)
     {
         // make datasetName clean
         datasetName = get_absolute_path(datasetName);
@@ -1321,8 +1514,8 @@ class HDF5File
     }
 
     // non-scalar (RGBValue) and unstrided target MultiArrayView
-    template<unsigned int N, class T>
-    inline void read(std::string datasetName, MultiArrayView<N, RGBValue<T>, UnstridedArrayTag> & array)
+    template<unsigned int N, class T, class Stride>
+    inline void read(std::string datasetName, MultiArrayView<N, RGBValue<T>, Stride> array)
     {
         // make datasetName clean
         datasetName = get_absolute_path(datasetName);
@@ -1331,8 +1524,8 @@ class HDF5File
     }
 
     // non-scalar (RGBValue) MultiArray
-    template<unsigned int N, class T>
-    inline void readAndResize(std::string datasetName, MultiArray<N, RGBValue<T> > & array)
+    template<unsigned int N, class T, class Alloc>
+    inline void readAndResize(std::string datasetName, MultiArray<N, RGBValue<T>, Alloc> & array)
     {
         // make datasetName clean
         datasetName = get_absolute_path(datasetName);
@@ -1354,8 +1547,11 @@ class HDF5File
         read_(datasetName, array, detail::getH5DataType<T>(), 3);
     }
 
-    template<unsigned int N, class T>
-    inline void readBlock(std::string datasetName, typename MultiArrayShape<N>::type blockOffset, typename MultiArrayShape<N>::type blockShape, MultiArrayView<N, RGBValue<T>, UnstridedArrayTag> & array)
+    template<unsigned int N, class T, class Stride>
+    inline void readBlock(std::string datasetName, 
+                          typename MultiArrayShape<N>::type blockOffset, 
+                          typename MultiArrayShape<N>::type blockShape, 
+                          MultiArrayView<N, RGBValue<T>, Stride> array)
     {
         // make datasetName clean
         datasetName = get_absolute_path(datasetName);
@@ -1400,6 +1596,11 @@ class HDF5File
 
             If the first character of datasetName is a "/", the path will be interpreted as absolute path,
             otherwise it will be interpreted as path relative to the current group.
+
+            Note that the memory order between VIGRA and HDF5 files differs: VIGRA uses 
+            Fortran-order, while HDF5 uses C-order. This means that a VIGRA MultiArray,
+            whose indices represent the 'x'-, 'y'-, and 'z'-axis in that order, is reversed
+            upon writing to an HDF5 file, i.e. in the file the axis order is 'z', 'y', 'x'. 
         */
     template<unsigned int N, class T>
     inline void createDataset(std::string datasetName, 
@@ -1457,14 +1658,11 @@ class HDF5File
         H5Pset_obj_track_times(plist, track_time);
 
         // enable chunks
-        if(chunkSize[0] > 0)
+        ArrayVector<hsize_t> chunks(defineChunks(chunkSize, shape, 1, compressionParameter));
+        if(chunks.size() > 0)
         {
-            hsize_t cSize [N];
-            for(int i = 0; i<N; i++)
-            {
-                cSize[i] = chunkSize[N-1-i];
-            }
-            H5Pset_chunk (plist, N, cSize);
+            std::reverse(chunks.begin(), chunks.end());
+            H5Pset_chunk (plist, chunks.size(), chunks.begin());
         }
 
         // enable compression
@@ -1520,6 +1718,37 @@ class HDF5File
             return std::string(begin()+last+1, end());
         }
     };
+    
+    template <class Shape>
+    ArrayVector<hsize_t> 
+    defineChunks(Shape const & chunks, Shape const & shape, int numBands, int compression = 0)
+    {
+        if(chunks[0] > 0)
+        {
+            ArrayVector<hsize_t> res(chunks.begin(), chunks.end());
+            if(numBands > 1)
+                res.insert(res.begin(), numBands);
+            return res;
+        }
+        else if(compression > 0)
+        {
+            // set default chunks to enable compression 
+            // (arbitrarily include about 300k pixels into each chunk, but make sure
+            //  that the chunk size doesn't exceed the shape)
+            ArrayVector<hsize_t> res(shape.begin(), shape.end());
+            hsize_t chunk_length = (hsize_t)std::pow(300000.0, 1.0 / shape.size());
+            for(unsigned int k=0; k < shape.size(); ++k)
+                if(res[k] > chunk_length)
+                    res[k] = chunk_length;
+            if(numBands > 1)
+                res.insert(res.begin(), numBands);
+            return res;
+        }
+        else
+        {
+            return ArrayVector<hsize_t>();
+        }
+    }
 
   public:
 
@@ -1644,6 +1873,10 @@ class HDF5File
             fclose( pFile );
             fileId = H5Fopen(filePath.c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
         }
+        else if(mode == OpenReadOnly) {
+            fclose( pFile );
+            fileId = H5Fopen(filePath.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
+        }
         else
         {
             fclose(pFile);
@@ -1742,7 +1975,7 @@ class HDF5File
         }
 
         // Open parent group
-        HDF5Handle groupHandle(openCreateGroup_(groupname), &H5Gclose, "Internal error");
+        HDF5Handle groupHandle(openCreateGroup_(groupname), &H5Gclose, "HDF5File::getDatasetHandle_(): Internal error");
 
         return H5Dopen(groupHandle, setname.c_str(), H5P_DEFAULT);
     }
@@ -1768,57 +2001,12 @@ class HDF5File
 
         /* low-level write function to write vigra MultiArray data as an attribute
          */
-    template<unsigned int N, class T>
-    void write_attribute_(std::string name, const std::string & attribute_name,
-                          const MultiArrayView<N, T, UnstridedArrayTag> & array,
+    template<unsigned int N, class T, class Stride>
+    void write_attribute_(std::string name, 
+                          const std::string & attribute_name,
+                          const MultiArrayView<N, T, Stride> & array,
                           const hid_t datatype, 
-                          const int numBandsOfType)
-    {
-        // shape of the array. Add one dimension, if array contains non-scalars.
-        ArrayVector<hsize_t> shape(array.shape().begin(), array.shape().end());
-        std::reverse(shape.begin(), shape.end());
-        if(numBandsOfType > 1)
-            shape.push_back(numBandsOfType);
-
-        HDF5Handle dataspace(H5Screate_simple(shape.size(),
-                                              shape.begin(), NULL),
-                             &H5Sclose, "HDF5File::writeAttribute(): Can not"
-                                        " create dataspace.");
-
-        std::string errorMessage ("HDF5File::writeAttribute(): can not find "
-                                  "object '" + name + "'.");
-
-        H5O_type_t h5_type = get_object_type_(name);
-        bool is_group = h5_type == H5O_TYPE_GROUP;
-        if (!is_group && h5_type != H5O_TYPE_DATASET)
-            vigra_precondition(0, "HDF5File::writeAttribute(): object \""
-                                   + name + "\" is neither a group nor a "
-                                   "dataset.");
-        // get parent object handle
-        HDF5Handle object_handle(is_group
-                                     ? openCreateGroup_(name)
-                                     : getDatasetHandle_(name),
-                                 is_group
-                                     ? &H5Gclose
-                                     : &H5Dclose,
-                                 errorMessage.c_str());
-        // create / open attribute
-        bool exists = existsAttribute(name, attribute_name);
-        HDF5Handle attributeHandle(exists
-                                   ? H5Aopen(object_handle,
-                                             attribute_name.c_str(),
-                                             H5P_DEFAULT)
-                                   : H5Acreate(object_handle,
-                                               attribute_name.c_str(), datatype,
-                                               dataspace, H5P_DEFAULT,
-                                               H5P_DEFAULT),
-                                   &H5Aclose,
-                                   "HDF5File::writeAttribute(): Can not create"
-                                   " attribute.");
-
-        // Write the data to the HDF5 object
-        H5Awrite(attributeHandle, datatype, array.data());
-    }
+                          const int numBandsOfType);
 
         /* Write single value attribute
            This function allows to write data of atomic datatypes (int, long, double)
@@ -1838,45 +2026,13 @@ class HDF5File
         write_attribute_(datasetName, attributeName, array, detail::getH5DataType<T>(), 1);
     }
 
-        /* low-level read function to write vigra MultiArray data from attributes
+        /* low-level read function to read vigra MultiArray data from attributes
          */
-    template<unsigned int N, class T>
-    inline void read_attribute_(std::string datasetName, std::string attributeName, MultiArrayView<N, T, UnstridedArrayTag> array, const hid_t datatype, const int numBandsOfType)
-    {
-        std::string dataset_path = get_absolute_path(datasetName);
-        // open Attribute handle
-        std::string message = "Error: could not get handle for attribute '"+attributeName+"'' of object '"+dataset_path+"'.";
-        HDF5Handle attr_handle (H5Aopen_by_name(fileHandle_,dataset_path.c_str(),attributeName.c_str(),H5P_DEFAULT,H5P_DEFAULT),&H5Aclose, message.c_str());
-
-        // get Attribute dataspace
-        message = "Error: could not get dataspace for attribute '"+attributeName+"'' of object '"+dataset_path+"'.";
-        HDF5Handle attr_dataspace_handle (H5Aget_space(attr_handle),&H5Sclose,message.c_str());
-
-        // obtain Attribute shape
-        int dims = H5Sget_simple_extent_ndims(attr_dataspace_handle);
-        ArrayVector<hsize_t> dimshape(dims);
-        H5Sget_simple_extent_dims(attr_dataspace_handle, dimshape.data(), NULL);
-        
-        // invert the dimensions to guarantee VIGRA-compatible order
-        std::reverse(dimshape.begin(), dimshape.end());
-
-        int offset = (numBandsOfType > 1)
-                        ? 1
-                        : 0;
-        message = "Error: Array dimension disagrees with dataset dimension.";
-        // the object in the HDF5 file may have one additional dimension which we then interpret as the pixel type bands
-        vigra_precondition((N + offset) == MultiArrayIndex(dims), message);
-
-        typename MultiArrayShape<N>::type shape;
-        for(int k=offset; k < (int)dimshape.size(); ++k)
-            shape[k-offset] = (MultiArrayIndex)dimshape[k];
-
-        message = "Error: Array shape disagrees with dataset shape";
-        vigra_precondition(shape == array.shape(), message);
-
-        // simply read in the data as is
-        H5Aread( attr_handle, datatype, array.data());
-    }
+    template<unsigned int N, class T, class Stride>
+    void read_attribute_(std::string datasetName, 
+                         std::string attributeName, 
+                         MultiArrayView<N, T, Stride> array, 
+                         const hid_t datatype, const int numBandsOfType);
 
         /* Read a single value attribute.
            This functions allows to read a single value attribute of atomic datatype (int, long, double)
@@ -1906,69 +2062,13 @@ class HDF5File
 
         /* low-level write function to write vigra unstrided MultiArray data
         */
-    template<unsigned int N, class T>
-    inline void write_(std::string &datasetName, 
-                       const MultiArrayView<N, T, UnstridedArrayTag> & array, 
+    template<unsigned int N, class T, class Stride>
+    void write_(std::string &datasetName, 
+                       const MultiArrayView<N, T, Stride> & array, 
                        const hid_t datatype, 
                        const int numBandsOfType, 
                        typename MultiArrayShape<N>::type &chunkSize, 
-                       int compressionParameter = 0)
-    {
-        std::string groupname = SplitString(datasetName).first();
-        std::string setname = SplitString(datasetName).last();
-
-        // shape of the array. Add one dimension, if array contains non-scalars.
-        ArrayVector<hsize_t> shape(array.shape().begin(), array.shape().end());
-        std::reverse(shape.begin(), shape.end());
-
-        if(numBandsOfType > 1)
-            shape.push_back(numBandsOfType);
-
-        HDF5Handle dataspace(H5Screate_simple(shape.size(), shape.begin(), NULL), &H5Sclose, 
-                             "HDF5File::write(): Can not create dataspace.");
-
-        // create and open group:
-        std::string errorMessage ("HDF5File::write(): can not create group '" + groupname + "'.");
-        HDF5Handle groupHandle(openCreateGroup_(groupname), &H5Gclose, errorMessage.c_str());
-
-        // delete dataset, if it already exists
-        deleteDataset_(groupHandle, setname.c_str());
-
-        // set up properties list
-        HDF5Handle plist(H5Pcreate(H5P_DATASET_CREATE), &H5Pclose, 
-                         "HDF5File::write(): unable to create property list." );
-
-        // turn off time tagging of datasets by default.
-        H5Pset_obj_track_times(plist, track_time);
-
-        // enable chunks
-        if(chunkSize[0] > 0)
-        {
-            ArrayVector<hsize_t> cSize(chunkSize.begin(), chunkSize.end());
-            std::reverse(cSize.begin(), cSize.end());
-            if(numBandsOfType > 1)
-                cSize.push_back(numBandsOfType);
-            
-            H5Pset_chunk (plist, cSize.size(), cSize.begin());
-        }
-
-        // enable compression
-        if(compressionParameter > 0)
-        {
-            H5Pset_deflate(plist, compressionParameter);
-        }
-
-        // create dataset
-        HDF5Handle datasetHandle(H5Dcreate(groupHandle, setname.c_str(), datatype, dataspace,H5P_DEFAULT, plist, H5P_DEFAULT), 
-                                 &H5Dclose, "HDF5File::write(): Can not create dataset.");
-
-        // Write the data to the HDF5 dataset as is
-        herr_t write_status = H5Dwrite(datasetHandle, datatype, H5S_ALL,
-                                       H5S_ALL, H5P_DEFAULT, array.data());
-        vigra_precondition(write_status >= 0, "HDF5File::write_(): write to "
-                                        "dataset \"" + datasetName + "\" "
-                                        "failed.");
-    }
+                       int compressionParameter = 0);
 
         /* Write single value as dataset.
            This functions allows to write data of atomic datatypes (int, long, double)
@@ -1993,37 +2093,10 @@ class HDF5File
 
         /* low-level read function to read vigra unstrided MultiArray data
          */
-    template<unsigned int N, class T>
-    inline void read_(std::string datasetName, 
-                      MultiArrayView<N, T, UnstridedArrayTag> array, 
-                      const hid_t datatype, const int numBandsOfType)
-    {
-        //Prepare to read without using HDF5ImportInfo
-        ArrayVector<hsize_t> dimshape = getDatasetShape(datasetName);
-
-        std::string errorMessage ("HDF5File::read(): Unable to open dataset '" + datasetName + "'.");
-        HDF5Handle datasetHandle(getDatasetHandle_(datasetName), &H5Dclose, errorMessage.c_str());
-
-        int offset = (numBandsOfType > 1)
-                        ? 1
-                        : 0;
-
-        vigra_precondition((N + offset ) == MultiArrayIndex(dimshape.size()), // the object in the HDF5 file may have one additional dimension which we then interpret as the pixel type bands
-            "HDF5File::read(): Array dimension disagrees with dataset dimension.");
-
-        typename MultiArrayShape<N>::type shape;
-        for(int k=offset; k < (int)dimshape.size(); ++k)
-            shape[k-offset] = (MultiArrayIndex)dimshape[k];
-
-        vigra_precondition(shape == array.shape(),
-                           "HDF5File::read(): Array shape disagrees with dataset shape.");
-        if (offset)
-            vigra_precondition(dimshape[0] == numBandsOfType,
-                               "HDF5File::read(): Band count doesn't match destination array compound type.");
-
-        // simply read in the data as is
-        H5Dread( datasetHandle, datatype, H5S_ALL, H5S_ALL, H5P_DEFAULT, array.data() ); // .data() possible since void pointer!
-    }
+    template<unsigned int N, class T, class Stride>
+    void read_(std::string datasetName, 
+                      MultiArrayView<N, T, Stride> array, 
+                      const hid_t datatype, const int numBandsOfType);
 
         /* Read a single value.
            This functions allows to read a single datum of atomic datatype (int, long, double)
@@ -2056,91 +2129,530 @@ class HDF5File
 
        /* low-level write function to write vigra unstrided MultiArray data into a sub-block of a dataset
        */
-    template<unsigned int N, class T>
-    inline void writeBlock_(std::string datasetName, typename MultiArrayShape<N>::type &blockOffset, const MultiArrayView<N, T, UnstridedArrayTag> & array, const hid_t datatype, const int numBandsOfType)
-    {
-        // open dataset if it exists
-        std::string errorMessage = "HDF5File::writeBlock(): Error opening dataset '" + datasetName + "'.";
-        HDF5Handle datasetHandle (getDatasetHandle_(datasetName), &H5Dclose, errorMessage.c_str());
+    template<unsigned int N, class T, class Stride>
+    void writeBlock_(std::string datasetName, 
+                     typename MultiArrayShape<N>::type &blockOffset, 
+                     const MultiArrayView<N, T, Stride> & array, 
+                     const hid_t datatype, 
+                     const int numBandsOfType);
 
-        // hyperslab parameters for position, size, ...
-        hsize_t boffset [N];
-        hsize_t bshape [N];
-        hsize_t bones [N];
-
-        for(int i = 0; i < N; i++){
-            boffset[i] = blockOffset[N-1-i];
-            bshape[i] = array.size(N-1-i);
-            bones[i] = 1;
-        }
-
-        // create a target dataspace in memory with the shape of the desired block
-        HDF5Handle memspace_handle (H5Screate_simple(N,bshape,NULL),&H5Sclose,"Unable to get origin dataspace");
-
-        // get file dataspace and select the desired block
-        HDF5Handle dataspaceHandle (H5Dget_space(datasetHandle),&H5Sclose,"Unable to create target dataspace");
-        H5Sselect_hyperslab(dataspaceHandle, H5S_SELECT_SET, boffset, bones, bones, bshape);
-
-        // Write the data to the HDF5 dataset as is
-        H5Dwrite( datasetHandle, datatype, memspace_handle, dataspaceHandle, H5P_DEFAULT, array.data()); // .data() possible since void pointer!
-    }
-
-        /* low-level read function to read vigra unstrided MultiArray data from a sub-block of a dataset
+        /* low-level read function to read vigra unstrided MultiArray data from a sub-block of a dataset.
+        
+           The array must have the same shape as the block.
         */
-    template<unsigned int N, class T>
-    inline void readBlock_(std::string datasetName, typename MultiArrayShape<N>::type &blockOffset, typename MultiArrayShape<N>::type &blockShape, MultiArrayView<N, T, UnstridedArrayTag> &array, const hid_t datatype, const int numBandsOfType)
+    template<unsigned int N, class T, class Stride>
+    void readBlock_(std::string datasetName, 
+                    typename MultiArrayShape<N>::type &blockOffset, 
+                    typename MultiArrayShape<N>::type &blockShape, 
+                    MultiArrayView<N, T, Stride> &array, 
+                    const hid_t datatype, const int numBandsOfType);
+};  /* class HDF5File */
+
+/********************************************************************/
+
+template<unsigned int N, class T, class Stride>
+void HDF5File::write_(std::string &datasetName, 
+                      const MultiArrayView<N, T, Stride> & array, 
+                      const hid_t datatype, 
+                      const int numBandsOfType, 
+                      typename MultiArrayShape<N>::type &chunkSize, 
+                      int compressionParameter)
+{
+    std::string groupname = SplitString(datasetName).first();
+    std::string setname = SplitString(datasetName).last();
+
+    // shape of the array. Add one dimension, if array contains non-scalars.
+    ArrayVector<hsize_t> shape(array.shape().begin(), array.shape().end());
+    std::reverse(shape.begin(), shape.end());
+
+    if(numBandsOfType > 1)
+        shape.push_back(numBandsOfType);
+
+    HDF5Handle dataspace(H5Screate_simple(shape.size(), shape.begin(), NULL), &H5Sclose, 
+                         "HDF5File::write(): Can not create dataspace.");
+
+    // create and open group:
+    std::string errorMessage ("HDF5File::write(): can not create group '" + groupname + "'.");
+    HDF5Handle groupHandle(openCreateGroup_(groupname), &H5Gclose, errorMessage.c_str());
+
+    // delete dataset, if it already exists
+    deleteDataset_(groupHandle, setname.c_str());
+
+    // set up properties list
+    HDF5Handle plist(H5Pcreate(H5P_DATASET_CREATE), &H5Pclose, 
+                     "HDF5File::write(): unable to create property list." );
+
+    // turn off time tagging of datasets by default.
+    H5Pset_obj_track_times(plist, track_time);
+
+    // enable chunks
+    ArrayVector<hsize_t> chunks(defineChunks(chunkSize, array.shape(), numBandsOfType, compressionParameter));
+    if(chunks.size() > 0)
     {
-        //Prepare to read without using HDF5ImportInfo
-        //ArrayVector<hsize_t> dimshape = getDatasetShape(datasetName) ;
-        hssize_t dimensions = getDatasetDimensions(datasetName);
-
-        std::string errorMessage ("HDF5File::readBlock(): Unable to open dataset '" + datasetName + "'.");
-        HDF5Handle datasetHandle (getDatasetHandle_(datasetName), &H5Dclose, errorMessage.c_str());
-
-        int offset = (numBandsOfType > 1)
-                         ? 1
-                         : 0;
-
-        vigra_precondition(( (N + offset ) ==  MultiArrayIndex(dimensions)), // the object in the HDF5 file may have one additional dimension which we then interpret as the pixel type bands
-            "readHDF5_block(): Array dimension disagrees with data dimension.");
-
-        vigra_precondition(blockShape == array.shape(),
-             "readHDF5_block(): Array shape disagrees with block size.");
-
-        // hyperslab parameters for position, size, ...
-        hsize_t boffset [N];
-        hsize_t bshape [N];
-        hsize_t bones [N];
-
-        for(int i = 0; i < N; i++){
-            // vigra and hdf5 use different indexing
-            boffset[i] = blockOffset[N-1-i];
-            //bshape[i] = blockShape[i];
-            bshape[i] = blockShape[N-1-i];
-            //boffset[i] = blockOffset[N-1-i];
-            bones[i] = 1;
-        }
-
-        // create a target dataspace in memory with the shape of the desired block
-        HDF5Handle memspace_handle(H5Screate_simple(N,bshape,NULL),&H5Sclose,
-                                   "Unable to create target dataspace");
-
-        // get file dataspace and select the desired block
-        HDF5Handle dataspaceHandle(H5Dget_space(datasetHandle),&H5Sclose, 
-                                   "Unable to get dataspace");
-        H5Sselect_hyperslab(dataspaceHandle, H5S_SELECT_SET, boffset, bones, bones, bshape);
-
-        // now read the data
-        H5Dread( datasetHandle, datatype, memspace_handle, dataspaceHandle, H5P_DEFAULT, array.data() ); // .data() possible since void pointer!
+        std::reverse(chunks.begin(), chunks.end());
+        H5Pset_chunk (plist, chunks.size(), chunks.begin());
     }
 
-};  /* class HDF5File */
+    // enable compression
+    if(compressionParameter > 0)
+    {
+        H5Pset_deflate(plist, compressionParameter);
+    }
+
+    // create dataset
+    HDF5Handle datasetHandle(H5Dcreate(groupHandle, setname.c_str(), datatype, dataspace,H5P_DEFAULT, plist, H5P_DEFAULT), 
+                             &H5Dclose, "HDF5File::write(): Can not create dataset.");
+
+    herr_t status = 0;
+    if(array.isUnstrided())
+    {
+        // Write the data directly from the array data buffer
+        status = H5Dwrite(datasetHandle, datatype, H5S_ALL, H5S_ALL, H5P_DEFAULT, array.data());
+    }
+    else
+    {
+        // otherwise, we need an intermediate buffer
+        // FIXME: right now, the buffer has the same size as the array to be read
+        //        incomplete code for better solutions is below
+        // MultiArray<N, T> buffer(array);
+        // status = H5Dwrite(datasetHandle, datatype, H5S_ALL, H5S_ALL, H5P_DEFAULT, buffer.data());
+        
+        int offset = numBandsOfType > 1 ? 1 : 0;
+        std::reverse(shape.begin(), shape.end());
+        if(chunks.size() > 0)
+        {
+            // if the file is chunked, we use a buffer that matches the chunk size.
+            std::reverse(chunks.begin(), chunks.end());
+        }
+        else
+        {
+            // otherwise, we compute a suitable chunk size.
+            ArrayVector<hsize_t>(shape.size(), 1).swap(chunks);
+            chunks[0] = numBandsOfType;
+            MultiArrayIndex prod = 1;
+            for(int k=0; k<N;  ++k)
+            {
+                chunks[k+offset] = array.shape(k);
+                prod *= array.shape(k);
+                if(prod > 300000)
+                    break;
+            }
+        }
+
+        ArrayVector<hsize_t> null(shape.size(), 0),
+                             start(shape.size(), 0),
+                             count(shape.size(), 1);
+        
+        count[N-1-offset] = numBandsOfType;
+        
+        typedef typename MultiArrayShape<N>::type Shape;
+        Shape chunkCount, chunkMaxShape;
+        for(int k=offset; k<chunks.size(); ++k)
+        {
+            chunkMaxShape[k-offset] = chunks[k];
+            chunkCount[k-offset] = (MultiArrayIndex)std::ceil(double(shape[k]) / chunks[k]);
+        }
+        
+        typename CoupledIteratorType<N>::type chunkIter = createCoupledIterator(chunkCount),
+                                              chunkEnd  = chunkIter.getEndIterator();
+        for(; chunkIter != chunkEnd; ++chunkIter)
+        {
+            Shape chunkStart(chunkIter.point() * chunkMaxShape),
+                  chunkStop(min(chunkStart + chunkMaxShape, array.shape()));
+            MultiArray<N, T> buffer(array.subarray(chunkStart, chunkStop));
+            
+            for(int k=0; k<N; ++k)
+            {
+                start[N-1-offset-k] = chunkStart[k];
+                count[N-1-offset-k] = buffer.shape(k);
+            }
+            HDF5Handle filespace(H5Dget_space(datasetHandle),
+                                 &H5Sclose, "HDF5File::write(): unable to create hyperslabs.");
+            status = H5Sselect_hyperslab(filespace, H5S_SELECT_SET, start.data(), NULL, count.data(), NULL);
+            if(status < 0)
+                break;
+                
+            HDF5Handle dataspace(H5Screate_simple(count.size(), count.data(), NULL),
+                                 &H5Sclose, "HDF5File::write(): unable to create hyperslabs."); 
+            status = H5Sselect_hyperslab(dataspace, H5S_SELECT_SET, null.data(), NULL, count.data(), NULL);
+            if(status < 0)
+                break;
+                
+            status = H5Dwrite(datasetHandle, datatype, dataspace, filespace, H5P_DEFAULT, buffer.data());
+            if(status < 0)
+                break;
+        }
+    }
+    vigra_postcondition(status >= 0,
+        "HDF5File::write(): write to dataset '" + datasetName + "' via H5Dwrite() failed.");
+}
+
+/********************************************************************/
+
+template<unsigned int N, class T, class Stride>
+void HDF5File::writeBlock_(std::string datasetName, 
+                           typename MultiArrayShape<N>::type &blockOffset, 
+                           const MultiArrayView<N, T, Stride> & array, 
+                           const hid_t datatype, 
+                           const int numBandsOfType)
+{
+    // open dataset if it exists
+    std::string errorMessage = "HDF5File::writeBlock(): Error opening dataset '" + datasetName + "'.";
+    HDF5Handle datasetHandle (getDatasetHandle_(datasetName), &H5Dclose, errorMessage.c_str());
+
+    // hyperslab parameters for position, size, ...
+    hsize_t boffset [N];
+    hsize_t bshape [N];
+    hsize_t bones [N];
+
+    for(int i = 0; i < N; i++){
+        boffset[i] = blockOffset[N-1-i];
+        bshape[i] = array.size(N-1-i);
+        bones[i] = 1;
+    }
+
+    // create a target dataspace in memory with the shape of the desired block
+    HDF5Handle memspace_handle (H5Screate_simple(N,bshape,NULL),&H5Sclose,"Unable to get origin dataspace");
+
+    // get file dataspace and select the desired block
+    HDF5Handle dataspaceHandle (H5Dget_space(datasetHandle),&H5Sclose,"Unable to create target dataspace");
+    H5Sselect_hyperslab(dataspaceHandle, H5S_SELECT_SET, boffset, bones, bones, bshape);
+
+    herr_t status = 0;
+    if(array.isUnstrided())
+    {
+        // when the array is unstrided, we can read the data directly from the array buffer
+        status = H5Dwrite( datasetHandle, datatype, memspace_handle, dataspaceHandle, H5P_DEFAULT, array.data());
+    }
+    else
+    {
+        // otherwise, we must copy the data into an unstrided extra buffer
+        MultiArray<N, T> buffer(array);
+        status = H5Dwrite( datasetHandle, datatype, memspace_handle, dataspaceHandle, H5P_DEFAULT, buffer.data());
+    }
+    vigra_postcondition(status >= 0,
+        "HDF5File::writeBlock(): write to dataset '" + datasetName + "' via H5Dwrite() failed.");
+}
+
+/********************************************************************/
+
+template<unsigned int N, class T, class Stride>
+void HDF5File::write_attribute_(std::string name, 
+                                const std::string & attribute_name,
+                                const MultiArrayView<N, T, Stride> & array,
+                                const hid_t datatype, 
+                                const int numBandsOfType)
+{
+    // shape of the array. Add one dimension, if array contains non-scalars.
+    ArrayVector<hsize_t> shape(array.shape().begin(), array.shape().end());
+    std::reverse(shape.begin(), shape.end());
+    if(numBandsOfType > 1)
+        shape.push_back(numBandsOfType);
+
+    HDF5Handle dataspace(H5Screate_simple(shape.size(),
+                                          shape.begin(), NULL),
+                         &H5Sclose, "HDF5File::writeAttribute(): Can not"
+                                    " create dataspace.");
+
+    std::string errorMessage ("HDF5File::writeAttribute(): can not find "
+                              "object '" + name + "'.");
+
+    H5O_type_t h5_type = get_object_type_(name);
+    bool is_group = h5_type == H5O_TYPE_GROUP;
+    if (!is_group && h5_type != H5O_TYPE_DATASET)
+        vigra_precondition(0, "HDF5File::writeAttribute(): object \""
+                               + name + "\" is neither a group nor a "
+                               "dataset.");
+    // get parent object handle
+    HDF5Handle object_handle(is_group
+                                 ? openCreateGroup_(name)
+                                 : getDatasetHandle_(name),
+                             is_group
+                                 ? &H5Gclose
+                                 : &H5Dclose,
+                             errorMessage.c_str());
+    // create / open attribute
+    bool exists = existsAttribute(name, attribute_name);
+    HDF5Handle attributeHandle(exists
+                               ? H5Aopen(object_handle,
+                                         attribute_name.c_str(),
+                                         H5P_DEFAULT)
+                               : H5Acreate(object_handle,
+                                           attribute_name.c_str(), datatype,
+                                           dataspace, H5P_DEFAULT,
+                                           H5P_DEFAULT),
+                               &H5Aclose,
+                               "HDF5File::writeAttribute(): Can not create"
+                               " attribute.");
+    herr_t status = 0;
+    if(array.isUnstrided())
+    {
+        // write the data directly from the array data buffer
+        status = H5Awrite(attributeHandle, datatype, array.data());
+    }
+    else
+    {
+        // write the data via an unstrided copy
+        // (we assume that attributes are small arrays, so that the wasted memory is uncritical)
+        MultiArray<N, T> buffer(array);
+        status = H5Awrite(attributeHandle, datatype, buffer.data());
+    }
+    vigra_postcondition(status >= 0,
+        "HDF5File::writeAttribute(): write to attribute '" + attribute_name + "' via H5Awrite() failed.");
+}
+    
+/********************************************************************/
+
+template<unsigned int N, class T, class Stride>
+void HDF5File::read_(std::string datasetName, 
+                     MultiArrayView<N, T, Stride> array, 
+                     const hid_t datatype, const int numBandsOfType)
+{
+    //Prepare to read without using HDF5ImportInfo
+    ArrayVector<hsize_t> dimshape = getDatasetShape(datasetName);
+
+    std::string errorMessage ("HDF5File::read(): Unable to open dataset '" + datasetName + "'.");
+    HDF5Handle datasetHandle(getDatasetHandle_(datasetName), &H5Dclose, errorMessage.c_str());
+
+    // the object in the HDF5 file may have one additional dimension which we 
+    // interprete as the pixel type's bands
+    int offset = (numBandsOfType > 1)
+                    ? 1
+                    : 0;
+
+    vigra_precondition((N + offset ) == MultiArrayIndex(dimshape.size()), 
+        "HDF5File::read(): Array dimension disagrees with dataset dimension.");
+
+    typename MultiArrayShape<N>::type shape;
+    for(int k=offset; k < (int)dimshape.size(); ++k)
+        shape[k-offset] = (MultiArrayIndex)dimshape[k];
+
+    vigra_precondition(shape == array.shape(),
+                       "HDF5File::read(): Array shape disagrees with dataset shape.");
+    if (offset)
+        vigra_precondition(dimshape[0] == static_cast<hsize_t>(numBandsOfType),
+                           "HDF5File::read(): Band count doesn't match destination array compound type.");
+
+    herr_t status = 0;
+    if(array.isUnstrided())
+    {
+        // when the array is unstrided, we can read the data directly into the array buffer
+        status = H5Dread(datasetHandle, datatype, H5S_ALL, H5S_ALL, H5P_DEFAULT, array.data() );
+    }
+    else
+    {
+        // otherwise, we need an intermediate buffer
+
+        ArrayVector<hsize_t> null(dimshape.size(), 0),
+                             chunks(dimshape.size(), 1),
+                             start(dimshape.size(), 0),
+                             count(dimshape.size(), 1);
+
+        HDF5Handle properties(H5Dget_create_plist(datasetHandle),
+                             &H5Pclose, "HDF5File::read(): failed to get property list");
+        if(H5D_CHUNKED == H5Pget_layout(properties))
+        {
+            // if the file is chunked, we use a buffer that matches the chunk size.
+            H5Pget_chunk(properties, chunks.size(), chunks.data());
+            std::reverse(chunks.begin(), chunks.end());
+        }
+        else
+        {
+            // otherwise, we compute a suitable chunk size.
+            chunks[0] = numBandsOfType;
+            MultiArrayIndex prod = 1;
+            for(int k=0; k<N;  ++k)
+            {
+                chunks[k+offset] = array.shape(k);
+                prod *= array.shape(k);
+                if(prod > 300000)
+                    break;
+            }
+        }
+        
+        count[N-1-offset] = numBandsOfType;
+        
+        typedef typename MultiArrayShape<N>::type Shape;
+        Shape chunkCount, chunkMaxShape;
+        for(int k=offset; k<chunks.size(); ++k)
+        {
+            chunkMaxShape[k-offset] = chunks[k];
+            chunkCount[k-offset] = (MultiArrayIndex)std::ceil(double(dimshape[k]) / chunks[k]);
+        }
+        
+        typename CoupledIteratorType<N>::type chunkIter = createCoupledIterator(chunkCount),
+                                              chunkEnd  = chunkIter.getEndIterator();
+        for(; chunkIter != chunkEnd; ++chunkIter)
+        {
+            Shape chunkStart(chunkIter.point() * chunkMaxShape),
+                  chunkStop(min(chunkStart + chunkMaxShape, array.shape()));
+            MultiArray<N, T> buffer(chunkStop - chunkStart);
+            
+            for(int k=0; k<N; ++k)
+            {
+                start[N-1-offset-k] = chunkStart[k];
+                count[N-1-offset-k] = buffer.shape(k);
+            }
+            HDF5Handle filespace(H5Dget_space(datasetHandle),
+                                 &H5Sclose, "HDF5File::read(): unable to create hyperslabs.");
+            status = H5Sselect_hyperslab(filespace, H5S_SELECT_SET, start.data(), NULL, count.data(), NULL);
+            if(status < 0)
+                break;
+                
+            HDF5Handle dataspace(H5Screate_simple(count.size(), count.data(), NULL),
+                                 &H5Sclose, "HDF5File::read(): unable to create hyperslabs."); 
+            status = H5Sselect_hyperslab(dataspace, H5S_SELECT_SET, null.data(), NULL, count.data(), NULL);
+            if(status < 0)
+                break;
+                
+            status = H5Dread(datasetHandle, datatype, dataspace, filespace, H5P_DEFAULT, buffer.data());
+            if(status < 0)
+                break;
+                
+            array.subarray(chunkStart, chunkStop) = buffer;
+        }
+    }
+    vigra_postcondition(status >= 0,
+        "HDF5File::read(): read from dataset '" + datasetName + "' via H5Dread() failed.");
+}
+
+/********************************************************************/
+
+template<unsigned int N, class T, class Stride>
+void HDF5File::readBlock_(std::string datasetName, 
+                          typename MultiArrayShape<N>::type &blockOffset, 
+                          typename MultiArrayShape<N>::type &blockShape, 
+                          MultiArrayView<N, T, Stride> &array, 
+                          const hid_t datatype, const int numBandsOfType)
+{
+    //Prepare to read without using HDF5ImportInfo
+    //ArrayVector<hsize_t> dimshape = getDatasetShape(datasetName) ;
+    hssize_t dimensions = getDatasetDimensions(datasetName);
+
+    std::string errorMessage ("HDF5File::readBlock(): Unable to open dataset '" + datasetName + "'.");
+    HDF5Handle datasetHandle (getDatasetHandle_(datasetName), &H5Dclose, errorMessage.c_str());
+
+    int offset = (numBandsOfType > 1)
+                     ? 1
+                     : 0;
+
+    vigra_precondition(( (N + offset ) ==  MultiArrayIndex(dimensions)), // the object in the HDF5 file may have one additional dimension which we then interpret as the pixel type bands
+        "HDF5File::readBlock(): Array dimension disagrees with data dimension.");
+
+    vigra_precondition(blockShape == array.shape(),
+         "HDF5File::readBlock(): Array shape disagrees with block size.");
+
+    // hyperslab parameters for position, size, ...
+    hsize_t boffset [N];
+    hsize_t bshape [N];
+    hsize_t bones [N];
+
+    for(int i = 0; i < N; i++){
+        // vigra and hdf5 use different indexing
+        boffset[i] = blockOffset[N-1-i];
+        //bshape[i] = blockShape[i];
+        bshape[i] = blockShape[N-1-i];
+        //boffset[i] = blockOffset[N-1-i];
+        bones[i] = 1;
+    }
+
+    // create a target dataspace in memory with the shape of the desired block
+    HDF5Handle memspace_handle(H5Screate_simple(N,bshape,NULL),&H5Sclose,
+                               "Unable to create target dataspace");
+
+    // get file dataspace and select the desired block
+    HDF5Handle dataspaceHandle(H5Dget_space(datasetHandle),&H5Sclose, 
+                               "Unable to get dataspace");
+    H5Sselect_hyperslab(dataspaceHandle, H5S_SELECT_SET, boffset, bones, bones, bshape);
+
+    herr_t status = 0;
+    if(array.isUnstrided())
+    {
+        // when the array is unstrided, we can read the data directly into the array buffer
+        status = H5Dread( datasetHandle, datatype, memspace_handle, dataspaceHandle, H5P_DEFAULT, array.data());
+    }
+    else
+    {
+        // otherwise, we need an unstrided extra buffer ...
+        MultiArray<N, T> buffer(array.shape());
+        status = H5Dread( datasetHandle, datatype, memspace_handle, dataspaceHandle, H5P_DEFAULT, buffer.data());
+        // ... and must copy the values
+        if(status >= 0)
+            array = buffer;
+    }
+    vigra_postcondition(status >= 0,
+        "HDF5File::readBlock(): read from dataset '" + datasetName + "' via H5Dread() failed.");
+}
+
+/********************************************************************/
+
+template<unsigned int N, class T, class Stride>
+void HDF5File::read_attribute_(std::string datasetName, 
+                               std::string attributeName, 
+                               MultiArrayView<N, T, Stride> array, 
+                               const hid_t datatype, const int numBandsOfType)
+{
+    std::string dataset_path = get_absolute_path(datasetName);
+    // open Attribute handle
+    std::string message = "HDF5File::readAttribute(): could not get handle for attribute '"+attributeName+"'' of object '"+dataset_path+"'.";
+    HDF5Handle attr_handle (H5Aopen_by_name(fileHandle_,dataset_path.c_str(),attributeName.c_str(),H5P_DEFAULT,H5P_DEFAULT),&H5Aclose, message.c_str());
+
+    // get Attribute dataspace
+    message = "HDF5File::readAttribute(): could not get dataspace for attribute '"+attributeName+"'' of object '"+dataset_path+"'.";
+    HDF5Handle attr_dataspace_handle (H5Aget_space(attr_handle),&H5Sclose,message.c_str());
+
+    // obtain Attribute shape
+    int raw_dims = H5Sget_simple_extent_ndims(attr_dataspace_handle);
+    int dims = std::max(raw_dims, 1); // scalar attributes may be stored with raw_dims==0
+    ArrayVector<hsize_t> dimshape(dims);
+    if(raw_dims > 0)
+        H5Sget_simple_extent_dims(attr_dataspace_handle, dimshape.data(), NULL);
+    else
+        dimshape[0] = 1;
+    
+    // invert the dimensions to guarantee VIGRA-compatible order
+    std::reverse(dimshape.begin(), dimshape.end());
+
+    int offset = (numBandsOfType > 1)
+                    ? 1
+                    : 0;
+    message = "HDF5File::readAttribute(): Array dimension disagrees with dataset dimension.";
+    // the object in the HDF5 file may have one additional dimension which we then interpret as the pixel type bands
+    vigra_precondition((N + offset) == MultiArrayIndex(dims), message);
+
+    for(int k=offset; k < (int)dimshape.size(); ++k)
+        vigra_precondition(array.shape()[k-offset] == (MultiArrayIndex)dimshape[k],
+                           "HDF5File::readAttribute(): Array shape disagrees with dataset shape");
+
+    herr_t status = 0;
+    if(array.isUnstrided())
+    {
+        // when the array is unstrided, we can read the data directly into the array buffer
+        status = H5Aread( attr_handle, datatype, array.data());
+    }
+    else
+    {
+        // otherwise, we need an unstrided extra buffer ...
+        // (we assume that attributes are small arrays, so that the wasted memory is uncritical)
+        MultiArray<N, T> buffer(array.shape());
+        status = H5Aread( attr_handle, datatype, buffer.data() );
+        // ... and must copy the values
+        if(status >= 0)
+            array = buffer;
+    }
+    vigra_postcondition(status >= 0,
+        "HDF5File::readAttribute(): read from attribute '" + attributeName + "' via H5Aread() failed.");
+}
+
+/********************************************************************/
 
 namespace detail {
 
 template <class Shape>
 inline void
-selectHyperslabs(HDF5Handle & mid1, HDF5Handle & mid2, Shape const & shape, int & counter, const int elements, const int numBandsOfType)
+selectHyperslabs(HDF5Handle & mid1, HDF5Handle & mid2, 
+                 Shape const & shape, 
+                 int & counter, const int elements, const int numBandsOfType)
 {
     // select hyperslab in HDF5 file
     hsize_t shapeHDF5[2];
@@ -2184,7 +2696,10 @@ selectHyperslabs(HDF5Handle & mid1, HDF5Handle & mid2, Shape const & shape, int 
 
 template <class DestIterator, class Shape, class T>
 inline void
-readHDF5Impl(DestIterator d, Shape const & shape, const hid_t dataset_id, const hid_t datatype, ArrayVector<T> & buffer, int & counter, const int elements, const int numBandsOfType, MetaInt<0>)
+readHDF5Impl(DestIterator d, Shape const & shape, 
+             const hid_t dataset_id, const hid_t datatype, 
+             ArrayVector<T> & buffer, int & counter, 
+             const int elements, const int numBandsOfType, MetaInt<0>)
 {
     HDF5Handle mid1, mid2;
 
@@ -2309,29 +2824,30 @@ void readHDF5(const HDF5ImportInfo &info, MultiArrayView<N, T, UnstridedArrayTag
 }
 
 // scalar and strided target multi array
-template<unsigned int N, class T>
-inline void readHDF5(const HDF5ImportInfo &info, MultiArrayView<N, T, StridedArrayTag> array) // scalar
+template<unsigned int N, class T, class Stride>
+inline void readHDF5(const HDF5ImportInfo &info, MultiArrayView<N, T, Stride> array) // scalar
 {
     readHDF5(info, array, detail::getH5DataType<T>(), 1);
 }
 
 // non-scalar (TinyVector) and strided target multi array
-template<unsigned int N, class T, int SIZE>
-inline void readHDF5(const HDF5ImportInfo &info, MultiArrayView<N, TinyVector<T, SIZE>, StridedArrayTag> array) 
+template<unsigned int N, class T, int SIZE, class Stride>
+inline void readHDF5(const HDF5ImportInfo &info, MultiArrayView<N, TinyVector<T, SIZE>, Stride> array) 
 {
     readHDF5(info, array, detail::getH5DataType<T>(), SIZE);
 }
 
 // non-scalar (RGBValue) and strided target multi array
-template<unsigned int N, class T>
-inline void readHDF5(const HDF5ImportInfo &info, MultiArrayView<N, RGBValue<T>, StridedArrayTag> array) 
+template<unsigned int N, class T, class Stride>
+inline void readHDF5(const HDF5ImportInfo &info, MultiArrayView<N, RGBValue<T>, Stride> array) 
 {
     readHDF5(info, array, detail::getH5DataType<T>(), 3);
 }
 
 // strided target multi array
-template<unsigned int N, class T>
-void readHDF5(const HDF5ImportInfo &info, MultiArrayView<N, T, StridedArrayTag> array, const hid_t datatype, const int numBandsOfType)
+template<unsigned int N, class T, class Stride>
+void readHDF5(const HDF5ImportInfo &info, MultiArrayView<N, T, Stride> array, 
+              const hid_t datatype, const int numBandsOfType)
 {
     int offset = (numBandsOfType > 1);
 

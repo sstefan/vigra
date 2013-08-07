@@ -2,6 +2,17 @@ IF(DOXYGEN_FOUND AND PYTHONINTERP_FOUND)
     execute_process(COMMAND ${DOXYGEN_EXECUTABLE} --version
                   OUTPUT_VARIABLE DOXYGEN_VERSION OUTPUT_STRIP_TRAILING_WHITESPACE)
 
+    if(DOXYGEN_VERSION VERSION_LESS 1.8)
+        set(DOXYGEN_BEFORE_1_8 "")
+        set(DOXYGEN_FROM_1_8_2 "#")
+    elseif(DOXYGEN_VERSION VERSION_LESS 1.8.2)
+        set(DOXYGEN_BEFORE_1_8 "#")
+        set(DOXYGEN_FROM_1_8_2 "#")
+    else()
+        set(DOXYGEN_BEFORE_1_8 "#")
+        set(DOXYGEN_FROM_1_8_2 "")
+    endif()
+    
     CONFIGURE_FILE(
         ${CMAKE_CURRENT_SOURCE_DIR}/Doxyfile.in
         ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile
@@ -37,10 +48,10 @@ IF(DOXYGEN_FOUND AND PYTHONINTERP_FOUND)
 ELSE()
     ADD_CUSTOM_TARGET (doc_cpp 
         COMMAND ${CMAKE_COMMAND} -E echo
-            "Cannot generate C++ documentation "
-            "(doxygen or Python not found)")
+            \"Cannot generate C++ documentation 
+            (doxygen or Python not found)\")
 
-ENDIF(DOXYGEN_FOUND AND PYTHONINTERP_FOUND)
+ENDIF()
 
 # create fallback index.html that simply refers to the online documentation
 file(MAKE_DIRECTORY ${DOCDIR}/vigra)

@@ -141,14 +141,14 @@ namespace vigra {
         return desc;
     }
 
-    std::auto_ptr<Decoder> TIFFCodecFactory::getDecoder() const
+    VIGRA_UNIQUE_PTR<Decoder> TIFFCodecFactory::getDecoder() const
     {
-        return std::auto_ptr<Decoder>( new TIFFDecoder() );
+        return VIGRA_UNIQUE_PTR<Decoder>( new TIFFDecoder() );
     }
 
-    std::auto_ptr<Encoder> TIFFCodecFactory::getEncoder() const
+    VIGRA_UNIQUE_PTR<Encoder> TIFFCodecFactory::getEncoder() const
     {
-        return std::auto_ptr<Encoder>( new TIFFEncoder() );
+        return VIGRA_UNIQUE_PTR<Encoder>( new TIFFEncoder() );
     }
 
     class TIFFCodecImpl
@@ -465,8 +465,9 @@ namespace vigra {
                             vigra_fail( "TIFFDecoderImpl::init(): Sampleformat or Datatype tag undefined and guessing sampletype from Bits per Sample failed." );
                             break;
                     }
-                    std::cerr << "Warning: no TIFFTAG_SAMPLEFORMAT or TIFFTAG_DATATYPE, "
-                                 "guessing pixeltype '" << pixeltype << "'.\n";
+                    if(bits_per_sample != 8) // issue the warning only for non-trivial cases
+                        std::cerr << "Warning: no TIFFTAG_SAMPLEFORMAT or TIFFTAG_DATATYPE, "
+                                     "guessing pixeltype '" << pixeltype << "'.\n";
                 }
             }
 
@@ -761,7 +762,7 @@ namespace vigra {
         // ctor, dtor
 
         TIFFEncoderImpl( const std::string & filename, const std::string & mode )
-            : tiffcomp(COMPRESSION_NONE), finalized(false)
+            : tiffcomp(COMPRESSION_LZW), finalized(false)
         {
             tiff = TIFFOpen( filename.c_str(), mode.c_str() );
             if (!tiff)

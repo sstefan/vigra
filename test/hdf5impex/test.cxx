@@ -38,9 +38,10 @@
 #include <cstdlib>
 #include <cstring>
 #include "vigra/stdimage.hxx"
-#include "unittest.hxx"
+#include "vigra/unittest.hxx"
 #include "vigra/hdf5impex.hxx"
 #include "vigra/multi_array.hxx"
+#include "vigra/multi_impex.hxx"
 
 using namespace vigra;
 
@@ -406,6 +407,7 @@ public:
 
         //write one dataset in each group level
         file.write("/dataset",out_data_1);
+        file.write("/dataset_transposed",out_data_1.transpose());
         file.cd_mk("/group/");
         file.write("/group/dataset",out_data_2);
         file.mkdir("subgroup1");
@@ -415,37 +417,76 @@ public:
         file.write("/atomicint", (int)-42);
         file.write("/atomicuint", (unsigned int)42);
         file.write("/atomicdouble", (double)3.1);
-        
+
         //create a new dataset
         MultiArrayShape<3>::type shape (50,50,50);
         unsigned char init = 42;
         file.createDataset<3,unsigned char>("/newset", shape, init );
 
+        //test compressed
+        MultiArray<3, double> out_data_6(Shape3(100,100,30));
+        linearSequence(out_data_6.begin(), out_data_6.end());
+        file.write("/compressed", out_data_6, 0, 6);
+        file.write("/compressed_transposed", out_data_6.transpose(), 0, 6);
+
         file.close();
+
+        should(isHDF5(file_name.c_str()));
+        should(!isHDF5("testsuccess.cxx"));
+        should(!isHDF5("file_does_not_exist.txt"));
+
         file.open(file_name, HDF5File::Open);
         
         // check if data is really written
 
-        MultiArray<2,int> in_data_1 (MultiArrayShape<2>::type(10, 11));
+        MultiArray<2,int> in_data_1 (Shape2(10, 11));
+        should(file.existsDataset("dataset"));
         file.read("dataset",in_data_1);
 
-        MultiArray<4,double> in_data_2 (MultiArrayShape<4>::type(10, 2, 3, 4));
+        MultiArray<2,int> in_data_1_transposed_write (Shape2(10, 11));
+        should(file.existsDataset("dataset_transposed"));
+        file.read("dataset_transposed",in_data_1_transposed_write.transpose());
+
+        MultiArray<2,int> in_data_1_transposed_read (Shape2(11, 10));
+        file.read("dataset", in_data_1_transposed_read.transpose());
+
+        MultiArray<4,double> in_data_2 (Shape4(10, 2, 3, 4));
+        should(file.existsDataset("/group/dataset"));
+        should(file.getDatasetType("/group/dataset") == "DOUBLE");
         file.read("/group/dataset",in_data_2);
 
-        MultiArray< 2, TinyVector<double, 4> > in_data_3 (MultiArrayShape<2>::type(5,8));
+        MultiArray< 2, TinyVector<double, 4> > in_data_3 (Shape2(5,8));
+        should(file.existsDataset("/group/subgroup1/dataset"));
         file.read("/group/subgroup1/dataset",in_data_3);
 
-        MultiArray< 2, RGBValue<double> > in_data_4(MultiArrayShape<2>::type(5,8));
+        MultiArray< 2, RGBValue<double> > in_data_4(Shape2(5,8));
+        should(file.existsDataset("/dataset_rgb"));
         file.read("/dataset_rgb", in_data_4);
 
         MultiArray< 3, unsigned char > in_data_5 (shape);
+        should(file.existsDataset("/newset"));
+        should(file.getDatasetType("/newset") == "UINT8");
         file.read("/newset",in_data_5);
 
+        MultiArray< 3, double > in_data_6 (out_data_6.shape());
+        should(file.existsDataset("/compressed"));
+        file.read("/compressed",in_data_6);
+
+        MultiArray< 3, double > in_data_6_transposed_write (out_data_6.shape());
+        should(file.existsDataset("/compressed_transposed"));
+        file.read("/compressed_transposed",in_data_6_transposed_write.transpose());
+
+        MultiArray< 3, double > in_data_6_transposed_read (out_data_6.transpose().shape());
+        file.read("/compressed",in_data_6_transposed_read.transpose());
+
         int atomicint;
+        should(file.existsDataset("/atomicint"));
         file.read("/atomicint",atomicint);
         int atomicuint;
+        should(file.existsDataset("/atomicuint"));
         file.read("/atomicuint",atomicuint);
         double atomicdouble;
+        should(file.existsDataset("/atomicdouble"));
         file.read("/atomicdouble",atomicdouble);
 
         file.flushToDisk();
@@ -453,6 +494,12 @@ public:
         // compare content
         // ...data 1
         should (in_data_1 == out_data_1);
+
+        // ...data 1 transposed write
+        should (in_data_1_transposed_write == out_data_1);
+
+        // ...data 1 transposed read
+        should (in_data_1_transposed_read.transpose() == out_data_1);
 
         // ...data 2
         should (in_data_2 == out_data_2);
@@ -462,6 +509,13 @@ public:
         should (in_data_4 == out_data_4);
         // ...data 5
         should (in_data_5(1,2,3) == init);
+
+        // ...data 6
+        should (in_data_6 == out_data_6);
+        // ...data 6 transposed write
+        should (in_data_6_transposed_write == out_data_6);
+        // ...data 6 transposed read
+        should (in_data_6_transposed_read.transpose() == out_data_6);
 
         should (atomicint == -42);
         should (atomicuint == 42);
@@ -578,6 +632,14 @@ public:
         std::string read_string2 = "";
         file.read("set_string2",read_string2);
         should(read_string2 == "abcdef");
+       
+        // test read-only opening
+        file.close();
+        file.open(file_name, HDF5File::OpenReadOnly);
+        read_string2 = "";
+        file.read("set_string2",read_string2);
+        should(read_string2 == "abcdef");
+        file.close();
     }
 
     // reading and writing attributes. get handles of groups, datasets and attributes

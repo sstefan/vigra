@@ -37,16 +37,19 @@
 #ifndef VIGRA_CONFIG_HXX
 #define VIGRA_CONFIG_HXX
 
-#include <vigra/configVersion.hxx>
+#include "configVersion.hxx"
 #include <stdexcept>
 
 ///////////////////////////////////////////////////////////
 //                                                       //
-//                   VisualC++ 5.0                       //
+//                     VisualC++                         //
 //                                                       //
 ///////////////////////////////////////////////////////////
 
 #ifdef _MSC_VER
+    // make sure that we use vigra/windows.h so that incompatibilities are fixed
+    #include "windows.h"
+
     #if(_MSC_VER < 1100)    // before VisualC++ 5.0
         #error "Need VisualC++ 5.0, Service Pack 2, or later"
     #endif // _MSC_VER < 1100
@@ -104,7 +107,28 @@
         #define VIGRA_NO_WORKING_STRINGSTREAM
     #endif
     
+    #if _MSC_VER >= 1600
+        #define VIGRA_HAS_UNIQUE_PTR
+    #endif
+    
     #define VIGRA_NEED_BIN_STREAMS
+    
+    #define VIGRA_NO_THREADSAFE_STATIC_INIT  // at least up to _MSC_VER <= 1600, probably higher
+    
+    // usage: 
+    //   static int * p = VIGRA_SAFE_STATIC(p, new int(42));
+    //
+    #define VIGRA_SAFE_STATIC(p, v) \
+    0; while(p == 0) ::vigra::detail::safeStaticInit(&p, v)
+    
+    namespace vigra { namespace detail {
+    template <class T>
+    inline void safeStaticInit(T ** p, T * v)
+    {
+        if (InterlockedCompareExchangePointer((PVOID *)p, v, 0) != 0)
+            delete v;
+    }
+    }} // namespace vigra::detail
     
     #ifndef VIGRA_ENABLE_ANNOYING_WARNINGS
         #pragma warning ( disable: 4244 4267) // implicit integer conversion warnings
@@ -138,6 +162,10 @@
     #pragma GCC diagnostic ignored "-Wstrict-aliasing"  
     #pragma GCC diagnostic ignored "-Wshadow"  
     
+    #if defined(__GXX_EXPERIMENTAL_CXX0X__) || __cplusplus >= 201103L
+        #define VIGRA_HAS_UNIQUE_PTR
+    #endif
+
 #endif  // __GNUC__
 
 ///////////////////////////////////////////////////////////
@@ -212,6 +240,19 @@
 
 #ifndef VIGRA_EXPORT
     #define VIGRA_EXPORT
+#endif
+
+#ifdef VIGRA_HAS_UNIQUE_PTR
+#  define VIGRA_UNIQUE_PTR  std::unique_ptr
+#else
+#  define VIGRA_UNIQUE_PTR  std::auto_ptr
+#endif
+
+#ifndef VIGRA_NO_THREADSAFE_STATIC_INIT    
+    // usage: 
+    //   static int * p = VIGRA_SAFE_STATIC(p, new int(42));
+    //
+    #define VIGRA_SAFE_STATIC(p, v) v
 #endif
 
 namespace vigra {

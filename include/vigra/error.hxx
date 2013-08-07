@@ -42,7 +42,7 @@
 #include <string>
 #include "config.hxx"
           
-/*! \page ErrorReporting Error Reporting
+/** \page ErrorReporting Error Reporting
     Exceptions and assertions provided by VIGRA
 
     <b>\#include</b> \<vigra/error.hxx\>
@@ -204,7 +204,9 @@ class InvariantViolation : public ContractViolation
     {}
 };
 
-#ifndef NDEBUG
+//#ifndef NDEBUG
+
+#if 1
 
 inline
 void throw_invariant_error(bool predicate, char const * message, char const * file, int line)

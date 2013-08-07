@@ -758,7 +758,7 @@ int laguerre1Root(POLYNOMIAL const & p, Complex & x, unsigned int multiplicity)
 {
     typedef typename NumericTraits<Complex>::ValueType Real;
     
-    static double frac[] = {0.0, 0.5, 0.25, 0.75, 0.13, 0.38, 0.62, 0.88, 1.0};
+    double frac[] = {0.0, 0.5, 0.25, 0.75, 0.13, 0.38, 0.62, 0.88, 1.0};
     int maxiter = 80, 
         count;
     double N = p.order();
@@ -920,8 +920,8 @@ struct PolynomialRootCompare
 
     <b> Usage:</b>
 
-        <b>\#include</b> \<vigra/polynomial.hxx\><br>
-        Namespace: vigra
+    <b>\#include</b> \<vigra/polynomial.hxx\><br>
+    Namespace: vigra
 
     \code
     // encode the polynomial  x^4 - 1
@@ -1058,8 +1058,8 @@ polynomialRoots(POLYNOMIAL const & poriginal, VECTOR & roots)
 
     <b> Usage:</b>
 
-        <b>\#include</b> \<vigra/polynomial.hxx\><br>
-        Namespace: vigra
+    <b>\#include</b> \<vigra/polynomial.hxx\><br>
+    Namespace: vigra
 
     \code
     // encode the polynomial  x^4 - 1

@@ -37,8 +37,9 @@
 #include <cmath>
 #include <cstdio>
 #include "vigra/convolution.hxx"
-#include "unittest.hxx"
+#include "vigra/unittest.hxx"
 #include "vigra/stdimage.hxx"
+#include "vigra/multi_array.hxx"
 #include "vigra/impex.hxx"
 #include "vigra/combineimages.hxx"
 #include "vigra/resampling_convolution.hxx"
@@ -48,8 +49,13 @@
 
 using namespace vigra;
 
-vigra::DImage getSymmetricLine(){
-    vigra::DImage src(40, 1);
+vigra::DImage getSymmetricLine(bool transposed = false){
+    vigra::DImage src;
+    
+    if(transposed)
+        src.resize(1, 40);
+    else
+        src.resize(40, 1);
 
     vigra::DImage::Accessor acc_src = src.accessor();
     vigra::DImage::iterator iter_src = src.begin();
@@ -104,6 +110,7 @@ vigra::DImage getUnsymmetricImage(){
 struct ConvolutionTest
 {
     typedef vigra::DImage Image;
+    typedef vigra::MultiArrayView<2, double> View;
     typedef vigra::DRGBImage RGBImage;
 
     ConvolutionTest()
@@ -140,6 +147,114 @@ struct ConvolutionTest
             acc.set(k, i);
         }
     }
+
+    void borderCopyTest()
+    {
+        static const int size = 6, kleft = -2, kright = 3,
+                         ksize = kright - kleft,
+                         outsize = size + ksize;
+
+        int data[size] = {1, 2, 3, 4, 5, 6};
+        int out[outsize];
+
+        vigra::StandardValueAccessor<int> a;
+
+        // copy entire array
+        {
+            vigra::detail::copyLineWithBorderTreatment(data, data+size, a, out, a,
+                                               0, size, kleft, kright, vigra::BORDER_TREATMENT_WRAP);
+            int r[] = {4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 2};
+            shouldEqualSequence(out, out+outsize, r);
+        }
+        {
+            vigra::detail::copyLineWithBorderTreatment(data, data+size, a, out, a,
+                                               0, size, kleft, kright, vigra::BORDER_TREATMENT_REFLECT);
+            int r[] = {4, 3, 2, 1, 2, 3, 4, 5, 6, 5, 4};
+            shouldEqualSequence(out, out+outsize, r);
+        }
+        {
+            vigra::detail::copyLineWithBorderTreatment(data, data+size, a, out, a,
+                                               0, size, kleft, kright, vigra::BORDER_TREATMENT_REPEAT);
+            int r[] = {1, 1, 1, 1, 2, 3, 4, 5, 6, 6, 6};
+            shouldEqualSequence(out, out+outsize, r);
+        }
+        {
+            vigra::detail::copyLineWithBorderTreatment(data, data+size, a, out, a,
+                                               0, size, kleft, kright, vigra::BORDER_TREATMENT_AVOID);
+            int r[] = {1, 2, 3, 4, 5, 6};
+            shouldEqualSequence(out+kright, out+outsize+kleft, r);
+        }
+        {
+            vigra::detail::copyLineWithBorderTreatment(data, data+size, a, out, a,
+                                               0, size, kleft, kright, vigra::BORDER_TREATMENT_ZEROPAD);
+            int r[] = {0, 0, 0, 1, 2, 3, 4, 5, 6, 0, 0};
+            shouldEqualSequence(out, out+outsize, r);
+        }
+
+        // copy with partial border treatment
+        {
+            vigra::detail::copyLineWithBorderTreatment(data, data+size, a, out, a,
+                                               1, size-1, kleft, kright, vigra::BORDER_TREATMENT_WRAP);
+            int r[] = {5, 6, 1, 2, 3, 4, 5, 6, 1};
+            shouldEqualSequence(out, out+outsize-2, r);
+        }
+        {
+            vigra::detail::copyLineWithBorderTreatment(data, data+size, a, out, a,
+                                               1, size-1, kleft, kright, vigra::BORDER_TREATMENT_REFLECT);
+            int r[] = {3, 2, 1, 2, 3, 4, 5, 6, 5};
+            shouldEqualSequence(out, out+outsize-2, r);
+        }
+        {
+            vigra::detail::copyLineWithBorderTreatment(data, data+size, a, out, a,
+                                               1, size-1, kleft, kright, vigra::BORDER_TREATMENT_REPEAT);
+            int r[] = {1, 1, 1, 2, 3, 4, 5, 6, 6};
+            shouldEqualSequence(out, out+outsize-2, r);
+        }
+        {
+            vigra::detail::copyLineWithBorderTreatment(data, data+size, a, out, a,
+                                               1, size-1, kleft, kright, vigra::BORDER_TREATMENT_AVOID);
+            int r[] = {2, 3, 4, 5};
+            shouldEqualSequence(out+kright, out+outsize+kleft-2, r);
+        }
+        {
+            vigra::detail::copyLineWithBorderTreatment(data, data+size, a, out, a,
+                                               1, size-1, kleft, kright, vigra::BORDER_TREATMENT_ZEROPAD);
+            int r[] = {0, 0, 1, 2, 3, 4, 5, 6, 0};
+            shouldEqualSequence(out, out+outsize-2, r);
+        }
+
+        // copy interior, no border treatment necessary
+        {
+            vigra::detail::copyLineWithBorderTreatment(data, data+size, a, out, a,
+                                               kright, size+kleft, kleft, kright, vigra::BORDER_TREATMENT_WRAP);
+            int r[] = {1, 2, 3, 4, 5, 6};
+            shouldEqualSequence(out, out+outsize-ksize, r);
+        }
+        {
+            vigra::detail::copyLineWithBorderTreatment(data, data+size, a, out, a,
+                                               kright, size+kleft, kleft, kright, vigra::BORDER_TREATMENT_REFLECT);
+            int r[] = {1, 2, 3, 4, 5, 6};
+            shouldEqualSequence(out, out+outsize-ksize, r);
+        }
+        {
+            vigra::detail::copyLineWithBorderTreatment(data, data+size, a, out, a,
+                                               kright, size+kleft, kleft, kright, vigra::BORDER_TREATMENT_REPEAT);
+            int r[] = {1, 2, 3, 4, 5, 6};
+            shouldEqualSequence(out, out+outsize-ksize, r);
+        }
+        {
+            vigra::detail::copyLineWithBorderTreatment(data, data+size, a, out, a,
+                                               kright, size+kleft, kleft, kright, vigra::BORDER_TREATMENT_AVOID);
+            int r[] = {4};
+            shouldEqualSequence(out+kright, out+outsize+kleft-ksize, r);
+        }
+        {
+            vigra::detail::copyLineWithBorderTreatment(data, data+size, a, out, a,
+                                               kright, size+kleft, kleft, kright, vigra::BORDER_TREATMENT_ZEROPAD);
+            int r[] = {1, 2, 3, 4, 5, 6};
+            shouldEqualSequence(out, out+outsize-ksize, r);
+        }
+    }
     
     void initExplicitlyTest()
     {
@@ -172,6 +287,7 @@ struct ConvolutionTest
             std::string message(c.what());
             should(0 == expected.compare(message.substr(0,expected.size())));
         }
+
         try
         {
             k.initExplicitly(-1,1) = 1, 2, 3, 4;
@@ -207,8 +323,9 @@ struct ConvolutionTest
         }
     }
 
-    void simpleSharpeningTest(){
-         Image dest_lenna(lenna);
+    void simpleSharpeningTest()
+    {
+        Image dest_lenna(lenna);
         simpleSharpening(srcImageRange(lenna), destImage(dest_lenna), 0.8);
 
         Image dest_correct;
@@ -226,6 +343,11 @@ struct ConvolutionTest
             shouldEqualTolerance(acc_dest(i_dest) , acc_dest_correct(i_dest_correct), 1e-15);
         }
 
+        dest_lenna.init(0.0);
+        simpleSharpening(View(lenna), View(dest_lenna), 0.8);
+
+        using namespace multi_math;
+        should(all(abs(View(dest_lenna) - View(dest_correct)) < 3e-13));
     }
 
     void gaussianSharpeningTest()
@@ -249,6 +371,11 @@ struct ConvolutionTest
             shouldEqualTolerance(acc_dest(i_dest) , acc_dest_correct(i_dest_correct), 1e-6);
         }
 
+        dest_lenna.init(0.0);
+        gaussianSharpening(View(lenna), View(dest_lenna), 3., 0.7);
+
+        using namespace multi_math;
+        should(all(abs(View(dest_lenna) - View(dest_correct)) < 1e-6));
     }
 
     void stdConvolutionTestOnConstImage()
@@ -264,15 +391,20 @@ struct ConvolutionTest
         Image tmp_reflect(constimg);
         tmp_reflect = 0.0;
 
-        convolveImage(srcImageRange(constimg), destImage(tmp_clip), kernel2d(sym_kernel, BORDER_TREATMENT_CLIP));
+        sym_kernel.setBorderTreatment(BORDER_TREATMENT_CLIP);
+        convolveImage(View(constimg), View(tmp_clip), sym_kernel);
 
-        convolveImage(srcImageRange(constimg), destImage(tmp_avoid), kernel2d(sym_kernel, BORDER_TREATMENT_AVOID));
+        sym_kernel.setBorderTreatment(BORDER_TREATMENT_AVOID);
+        convolveImage(View(constimg), View(tmp_avoid), sym_kernel);
         
-        convolveImage(srcImageRange(constimg), destImage(tmp_wrap), kernel2d(sym_kernel, BORDER_TREATMENT_WRAP));
+        sym_kernel.setBorderTreatment(BORDER_TREATMENT_WRAP);
+        convolveImage(View(constimg), View(tmp_wrap), sym_kernel);
 
-        convolveImage(srcImageRange(constimg), destImage(tmp_repeat), kernel2d(sym_kernel, BORDER_TREATMENT_REPEAT));
+        sym_kernel.setBorderTreatment(BORDER_TREATMENT_REPEAT);
+        convolveImage(View(constimg), View(tmp_repeat), sym_kernel);
 
-        convolveImage(srcImageRange(constimg), destImage(tmp_reflect), kernel2d(sym_kernel, BORDER_TREATMENT_REFLECT));
+        sym_kernel.setBorderTreatment(BORDER_TREATMENT_REFLECT);
+        convolveImage(View(constimg), View(tmp_reflect), sym_kernel);
         
         Image::ScanOrderIterator i_src = constimg.begin();
         Image::ScanOrderIterator i_src_end = constimg.end();
@@ -815,8 +947,7 @@ struct ConvolutionTest
         gauss.initGaussian(scale);
         gauss.setBorderTreatment(BORDER_TREATMENT_REFLECT);
 
-        Image tmp1(lenna.size());
-        Image tmp2(lenna.size());
+        Image tmp1(lenna.size()), tmp2(lenna.size()), tmp3(lenna.size());
 
         separableConvolveX(srcImageRange(lenna), destImage(tmp1), kernel1d(gauss));
         separableConvolveY(srcImageRange(tmp1), destImage(tmp2), kernel1d(gauss));
@@ -832,6 +963,13 @@ struct ConvolutionTest
         {
             should(acc(i1) == acc(i2));
         }
+
+        tmp1 = 0.0;
+        separableConvolveX(View(lenna), View(tmp1), gauss);
+        separableConvolveY(View(tmp1), View(tmp3),  gauss);
+        gaussianSmoothing(View(lenna), View(tmp1), scale);
+        should(View(tmp1) == View(tmp2));
+        should(View(tmp1) == View(tmp3));
 
         // test recursive approximation
         Image recursive(lenna.size());
@@ -850,6 +988,10 @@ struct ConvolutionTest
             should(diff < 6.0);
         }
         should(sum / lenna.width() / lenna.height() < 0.5);
+
+        recursiveGaussianFilterX(View(lenna), View(tmp1), scale);
+        recursiveGaussianFilterY(View(tmp1), View(tmp2), scale);
+        should(View(recursive) == View(tmp2));
     }
     
     void optimalSmoothing3Test()
@@ -959,7 +1101,7 @@ struct ConvolutionTest
         Image tmpy(lenna.size());
         Image mag(lenna.size());
 
-        gaussianGradient(srcImageRange(lenna), destImage(tmpx), destImage(tmpy), 1.0);
+        gaussianGradient(View(lenna), View(tmpx), View(tmpy), 1.0);
         gaussianGradientMagnitude(srcImageRange(lenna), destImage(mag), 1.0);
 
         Image::ScanOrderIterator i1 = tmpx.begin();
@@ -1085,6 +1227,7 @@ struct ConvolutionTest
         Image tmpx(lenna.size());
         Image tmpy(lenna.size());
         Image lap(lenna.size());
+        Image lap1(lenna.size());
 
         vigra::Kernel1D<double> diff;
         diff.initOptimalSecondDerivative5();
@@ -1094,10 +1237,11 @@ struct ConvolutionTest
         separableConvolveX(srcImageRange(lenna), destImage(tmp), kernel1d(diff));
         separableConvolveY(srcImageRange(tmp), destImage(tmpx), kernel1d(smooth5));
         
-        separableConvolveX(srcImageRange(lenna), destImage(tmp), kernel1d(smooth5));
-        separableConvolveY(srcImageRange(tmp), destImage(tmpy), kernel1d(diff));
+        separableConvolveX(View(lenna), View(tmp), smooth5);
+        separableConvolveY(View(tmp), View(tmpy), diff);
 
         laplacianOfGaussian(srcImageRange(lenna), destImage(lap), 0.817);
+        laplacianOfGaussian(View(lenna), View(lap1), 0.817);
 
         for(int y=2; y<lenna.height()-2; ++y)
         {
@@ -1105,6 +1249,7 @@ struct ConvolutionTest
             {
                 double l = tmpx(x,y) + tmpy(x,y);
                 should(std::fabs(l-lap(x,y)) < 4.0);
+                shouldEqual(lap(x,y), lap1(x,y));
             }
         }
     }
@@ -1145,35 +1290,62 @@ struct ConvolutionTest
     
     void hessianTest()
     {
-        Image resxx(lenna.size());
-        Image resxy(lenna.size());
-        Image resyy(lenna.size());
         Image refxx(lenna.size());
         Image refxy(lenna.size());
         Image refyy(lenna.size());
 
-        hessianMatrixOfGaussian(srcImageRange(lenna), 
-            destImage(resxx), destImage(resxy), destImage(resyy), 1.0);
-            
         importImage(vigra::ImageImportInfo("lennahessxx.xv"), destImage(refxx));
         importImage(vigra::ImageImportInfo("lennahessyy.xv"), destImage(refyy));
         importImage(vigra::ImageImportInfo("lennahessxy.xv"), destImage(refxy));
-        
-        Image::ScanOrderIterator i1 = resxx.begin();
-        Image::ScanOrderIterator i1end = resxx.end();
-        Image::ScanOrderIterator i2 = resyy.begin();
-        Image::ScanOrderIterator i3 = resxy.begin();
-        Image::ScanOrderIterator r1 = refxx.begin();
-        Image::ScanOrderIterator r2 = refyy.begin();
-        Image::ScanOrderIterator r3 = refxy.begin();
-        Image::Accessor acc = constimg.accessor();
-        
-        
-        for(; i1 != i1end; ++i1, ++i2, ++i3, ++r1, ++r2, ++r3)
         {
-            shouldEqualTolerance(acc(i1)-acc(r1), 0.0, 1e-12);
-            shouldEqualTolerance(acc(i2)-acc(r2), 0.0, 1e-12);
-            shouldEqualTolerance(acc(i3)-acc(r3), 0.0, 1e-12);
+            Image resxx(lenna.size());
+            Image resxy(lenna.size());
+            Image resyy(lenna.size());
+
+            hessianMatrixOfGaussian(srcImageRange(lenna), 
+                destImage(resxx), destImage(resxy), destImage(resyy), 1.0);
+            
+            Image::ScanOrderIterator i1 = resxx.begin();
+            Image::ScanOrderIterator i1end = resxx.end();
+            Image::ScanOrderIterator i2 = resyy.begin();
+            Image::ScanOrderIterator i3 = resxy.begin();
+            Image::ScanOrderIterator r1 = refxx.begin();
+            Image::ScanOrderIterator r2 = refyy.begin();
+            Image::ScanOrderIterator r3 = refxy.begin();
+            Image::Accessor acc = constimg.accessor();
+        
+        
+            for(; i1 != i1end; ++i1, ++i2, ++i3, ++r1, ++r2, ++r3)
+            {
+                shouldEqualTolerance(acc(i1)-acc(r1), 0.0, 1e-12);
+                shouldEqualTolerance(acc(i2)-acc(r2), 0.0, 1e-12);
+                shouldEqualTolerance(acc(i3)-acc(r3), 0.0, 1e-12);
+            }
+        }
+        {
+            Image resxx(lenna.size());
+            Image resxy(lenna.size());
+            Image resyy(lenna.size());
+
+            hessianMatrixOfGaussian(View(lenna), 
+                                    View(resxx), View(resxy), View(resyy), 1.0);
+            
+            Image::ScanOrderIterator i1 = resxx.begin();
+            Image::ScanOrderIterator i1end = resxx.end();
+            Image::ScanOrderIterator i2 = resyy.begin();
+            Image::ScanOrderIterator i3 = resxy.begin();
+            Image::ScanOrderIterator r1 = refxx.begin();
+            Image::ScanOrderIterator r2 = refyy.begin();
+            Image::ScanOrderIterator r3 = refxy.begin();
+            Image::Accessor acc = constimg.accessor();
+        
+        
+            for(; i1 != i1end; ++i1, ++i2, ++i3, ++r1, ++r2, ++r3)
+            {
+                shouldEqualTolerance(acc(i1)-acc(r1), 0.0, 1e-12);
+                shouldEqualTolerance(acc(i2)-acc(r2), 0.0, 1e-12);
+                shouldEqualTolerance(acc(i3)-acc(r3), 0.0, 1e-12);
+            }
         }
     }
     
@@ -1189,10 +1361,10 @@ struct ConvolutionTest
         typedef BasicImage<TinyVector<double, 3> > VectorImage;
         VectorImage resst(lenna.size());
 
-        structureTensor(srcImageRange(lenna), 
-            destImage(resxx), destImage(resxy), destImage(resyy), 1.0, 2.0);
+        structureTensor(View(lenna), 
+                        View(resxx), View(resxy), View(resyy), 1.0, 2.0);
 
-        structureTensor(srcImageRange(lenna), destImage(resst), 1.0, 2.0);
+        structureTensor(View(lenna), MultiArrayView<2, TinyVector<double, 3> >(resst), 1.0, 2.0);
             
         importImage(vigra::ImageImportInfo("lennastxx.xv"), destImage(refxx));
         importImage(vigra::ImageImportInfo("lennastyy.xv"), destImage(refyy));
@@ -1369,10 +1541,10 @@ struct ConvolutionTest
         // Hier wird an einem symmetrischen Bild /\ getestet 
         // ob die korrekten Daten eingehalten wurden.
 
-        Image src(getSymmetricLine());
+        Image src(getSymmetricLine()), srct(getSymmetricLine(true));
         dest = src;
-        recursiveFilterX(srcImageRange(src), destImage(dest), 
-               VIGRA_CSTD::exp(-1.0), BORDER_TREATMENT_AVOID);
+        Image destt(srct);
+
         Image::value_type correct_data[40] = 
             {0.25, 1.25, 2.25, 3.25, 4.25, 5.25, 6.25, 7.25, 8.25, 9.25, 
              10.25, 11.249812, 12.249472, 13.248558, 14.246079, 15.239341, 
@@ -1381,11 +1553,17 @@ struct ConvolutionTest
              14.246079, 13.248558, 12.249472, 11.249812, 10.25, 9.25, 
              8.25, 7.25, 6.25, 5.25, 4.25, 3.25, 2.25, 1.25, 0.25};
 
+        recursiveFilterX(View(src), View(dest), 
+                         VIGRA_CSTD::exp(-1.0), BORDER_TREATMENT_AVOID);
+        recursiveFilterY(View(srct), View(destt), 
+                         VIGRA_CSTD::exp(-1.0), BORDER_TREATMENT_AVOID);
         Image::iterator dest_iter = dest.begin();
+        Image::iterator destt_iter = destt.begin();
 
         for (int i = 0 ; i < 40; i++)
         {
             shouldEqualTolerance (correct_data[i], dest_iter[i], 1e-7);
+            shouldEqualTolerance (correct_data[i], destt_iter[i], 1e-7);
         }
 
     }// end of recursiveFilterTestWithAvoid
@@ -1868,8 +2046,8 @@ struct ConvolutionTest
         Image tmp1(constimg);
         tmp1 = 0.0;
 
-        recursiveSmoothX(srcImageRange(constimg), destImage(tmp1), 1.0);
-        recursiveSmoothY(srcImageRange(tmp1), destImage(tmp1), 1.0);
+        recursiveSmoothX(View(constimg), View(tmp1), 1.0);
+        recursiveSmoothY(View(tmp1), View(tmp1), 1.0);
         
         Image::ScanOrderIterator i1 = constimg.begin();
         Image::ScanOrderIterator i1end = constimg.end();
@@ -1894,11 +2072,11 @@ struct ConvolutionTest
         Image tmp2(lenna);
         tmp2 = 0.0;
 
-        recursiveFirstDerivativeX(srcImageRange(lenna), destImage(tmp1), 1.0);
-        recursiveSmoothY(srcImageRange(tmp1), destImage(tmp1), 1.0);
+        recursiveFirstDerivativeX(View(lenna), View(tmp1), 1.0);
+        recursiveSmoothY(View(tmp1), View(tmp1), 1.0);
         
-        recursiveSmoothX(srcImageRange(lenna), destImage(tmp2), 1.0);
-        recursiveFirstDerivativeY(srcImageRange(tmp2), destImage(tmp2), 1.0);
+        recursiveSmoothX(View(lenna), View(tmp2), 1.0);
+        recursiveFirstDerivativeY(View(tmp2), View(tmp2), 1.0);
         
         Image::ScanOrderIterator i1 = tmp1.begin();
         Image::ScanOrderIterator i1end = tmp1.end();
@@ -1924,9 +2102,8 @@ struct ConvolutionTest
         Image tmp2(rampimg);
         tmp2 = 0.0;
 
-        recursiveSmoothX(srcImageRange(rampimg), destImage(tmp1), 1.0);
-        
-        recursiveSecondDerivativeX(srcImageRange(rampimg), destImage(tmp2), 1.0);
+        recursiveSmoothX(View(rampimg), View(tmp1), 1.0);
+        recursiveSecondDerivativeX(View(rampimg), View(tmp2), 1.0);
         
         Image::ScanOrderIterator i1 = rampimg.begin();
         Image::ScanOrderIterator i1end = i1 + rampimg.width();
@@ -1945,21 +2122,18 @@ struct ConvolutionTest
     {
          
         Image res(lenna.size());
-
-        nonlinearDiffusion(srcImageRange(lenna), destImage(res),
-                           vigra::DiffusivityFunctor<double>(4.0), 4.0);
                 
         Image comp(lenna.size());
         importImage(vigra::ImageImportInfo("lenna128nonlinear.xv"), destImage(comp));
 
-        Image::ScanOrderIterator i1 = res.begin();
-        Image::ScanOrderIterator i1end = res.end();
-        Image::ScanOrderIterator i2 = comp.begin();
-        
-        for(; i1 != i1end; ++i1, ++i2)
-        {
-            shouldEqualTolerance((*i1), (*i2), 1e-7);
-        }
+        nonlinearDiffusion(srcImageRange(lenna), destImage(res),
+                           vigra::DiffusivityFunctor<double>(4.0), 4.0);
+        shouldEqualSequenceTolerance(res.begin(), res.end(), comp.begin(), 1e-7);
+
+        res = 0;
+        nonlinearDiffusion(View(lenna), View(res),
+                           vigra::DiffusivityFunctor<double>(4.0), 4.0);
+        shouldEqualSequenceTolerance(res.begin(), res.end(), comp.begin(), 1e-7);
     }
     
     Image constimg, lenna, rampimg, sym_image, unsym_image;
@@ -1969,6 +2143,8 @@ struct ConvolutionTest
 
 struct ResamplingConvolutionTest
 {
+    typedef MultiArrayView<2, float> View;
+
     void testKernelsSpline()
     {
         BSpline<3, double> spline, dspline(1);
@@ -2060,8 +2236,8 @@ struct ResamplingConvolutionTest
         for(FImage::iterator i = res.begin(); i < res.end(); ++i)
             shouldEqual(*i, 1.0);
         
-        resamplingConvolveImage(srcImageRange(img), destImageRange(res),
-             dspline, samplingRatio, offset, spline, samplingRatio, offset);
+        resamplingConvolveImage(View(img), View(res),
+                                dspline, samplingRatio, offset, spline, samplingRatio, offset);
         for(FImage::iterator i = res.begin(); i < res.end(); ++i)
             shouldEqual(*i, 0.0);
     }
@@ -2079,7 +2255,7 @@ struct ResamplingConvolutionTest
         int hnew = rational_cast<int>((info.height() - 1 - offset) * samplingRatio + 1);
         
         FImage res(wnew, hnew);        
-        resamplingConvolveImage(srcImageRange(img), destImageRange(res),
+        resamplingConvolveImage(View(img), View(res),
              gauss, samplingRatio, offset, gauss, samplingRatio, offset);
              
         ImageImportInfo rinfo("resampling.xv");
@@ -2177,8 +2353,8 @@ struct TotalVariationTest{
   TotalVariationTest():width(50),height(50),data(Shape2(50,50)),out(Shape2(50,50)),weight(Shape2(50,50)){
     for (int y=0;y<height;y++){
       for (int x=0;x<width;x++){
-	weight(x,y)=1;
-	data(x,y)=testdata[x+width*y]/255.;
+        weight(x,y)=1;
+        data(x,y)=testdata[x+width*y]/255.;
       }
     }
   }
@@ -2209,10 +2385,10 @@ struct TotalVariationTest{
     
     for (int y=0;y<height;y++){
       for (int x=0;x<width;x++){
-	alpha(x,y)=alpha0;
-	beta(x,y)=beta0;
-	xedges(x,y)=1;
-	yedges(x,y)=1;
+        alpha(x,y)=alpha0;
+        beta(x,y)=beta0;
+        xedges(x,y)=1;
+        yedges(x,y)=1;
       }
     }
     out=data; 
@@ -2221,7 +2397,7 @@ struct TotalVariationTest{
       anisotropicTotalVariationFilter(data,weight,phi,alpha,beta,out,inner_steps);  
     }
     //exportImage(srcImageRange(out), vigra::ImageExportInfo("test_aniso.pgm"));
-    shouldEqualSequenceTolerance(out.begin(), out.end(), result_aniso_tv, 1e-12); 
+    shouldEqualSequenceTolerance(out.begin(), out.end(), result_aniso_tv, 1e-8); 
   }
     
   void testSecondOrderTotalVariation(){
@@ -2238,11 +2414,11 @@ struct TotalVariationTest{
     
     for (int y=0;y<height;y++){
       for (int x=0;x<width;x++){
-	alpha(x,y)=alpha0;
-	beta(x,y)=beta0;
-	gamma(x,y)=gamma0;
-	xedges(x,y)=1;
-	yedges(x,y)=1;
+        alpha(x,y)=alpha0;
+        beta(x,y)=beta0;
+        gamma(x,y)=gamma0;
+        xedges(x,y)=1;
+        yedges(x,y)=1;
       }
     }
     out=data; 
@@ -2262,6 +2438,9 @@ struct ConvolutionTestSuite
     ConvolutionTestSuite()
     : vigra::test_suite("ConvolutionTestSuite")
     {
+        add( testCase( &ConvolutionTest::borderCopyTest));
+
+#if 1
         add( testCase( &ConvolutionTest::initExplicitlyTest));
 
         add( testCase( &ConvolutionTest::simpleSharpeningTest)); 
@@ -2320,11 +2499,12 @@ struct ConvolutionTestSuite
 
         add( testCase( &ImagePyramidTest::testPyramidConstruction));
         add( testCase( &ImagePyramidTest::testBurtReduceExpand));
-	
-	add( testCase( &TotalVariationTest::testTotalVariation));
-	add( testCase( &TotalVariationTest::testWeightedTotalVariation));
-	add( testCase( &TotalVariationTest::testAnisotropicTotalVariation));
-	add( testCase( &TotalVariationTest::testSecondOrderTotalVariation));
+    
+        add( testCase( &TotalVariationTest::testTotalVariation));
+        add( testCase( &TotalVariationTest::testWeightedTotalVariation));
+        add( testCase( &TotalVariationTest::testAnisotropicTotalVariation));
+        add( testCase( &TotalVariationTest::testSecondOrderTotalVariation));
+#endif
     }
 };
 

@@ -146,7 +146,7 @@ namespace vigra
         virtual void init( const std::string & ) = 0;
 
         // initialize with an image index. For codecs that do not support this feature, the standard init is called.
-        virtual void init( const std::string & fileName, unsigned int imageIndex)
+        virtual void init( const std::string & fileName, unsigned int)
         {
           init(fileName);
         }
@@ -219,7 +219,7 @@ namespace vigra
         virtual void init( const std::string & ) = 0;
 
         // initialize with file access mode. For codecs that do not support this feature, the standard init is called.
-        virtual void init( const std::string & fileName, const std::string & mode )
+        virtual void init( const std::string & fileName, const std::string & )
         {
           init(fileName);
         }
@@ -267,8 +267,8 @@ namespace vigra
     struct CodecFactory
     {
         virtual CodecDesc getCodecDesc() const = 0;
-        virtual std::auto_ptr<Decoder> getDecoder() const = 0;
-        virtual std::auto_ptr<Encoder> getEncoder() const = 0;
+        virtual VIGRA_UNIQUE_PTR<Decoder> getDecoder() const = 0;
+        virtual VIGRA_UNIQUE_PTR<Encoder> getEncoder() const = 0;
         virtual ~CodecFactory() {};
     };
 
@@ -279,10 +279,10 @@ namespace vigra
     // - (in case of decoders) the file's magic string
     // - the filename extension
 
-    VIGRA_EXPORT std::auto_ptr<Decoder>
+    VIGRA_EXPORT VIGRA_UNIQUE_PTR<Decoder>
     getDecoder( const std::string &, const std::string & = "undefined", unsigned int = 0 );
 
-    VIGRA_EXPORT std::auto_ptr<Encoder>
+    VIGRA_EXPORT VIGRA_UNIQUE_PTR<Encoder>
     getEncoder( const std::string &, const std::string & = "undefined", const std::string & = "w" );
 
     VIGRA_EXPORT std::string

@@ -298,7 +298,168 @@ def("transform_" #name, registerConverters(&pythonColorTransform<float, 2, name#
     "\n" \
     "For details see " #name "Functor_ in the C++ documentation.\n")
 
+template<class T>
+NumpyAnyArray pythonApplyColortable(const NumpyArray<2, Singleband<T> >& valueImage, 
+                                    const NumpyArray<2, UInt8>& colortable,
+                                    NumpyArray<3, Multiband<npy_uint8> > res =  NumpyArray<3, Multiband<npy_uint8> >())
+{
+    vigra_precondition(!colortable.axistags(),
+                       "applyColortable(): colortable must not have axistags\n"
+                       "(use 'array.view(numpy.ndarray)' to remove them).");
+    
+    // Singleband: there is only a singleton channel axis (which is removed when converted from python numpy array to C++
+    // Multiband: channel axis is allowed to be singleband, but does not have to be,
+    //            will be last when converted Python -> C++ and channel axis is counted in the dimension ('3')
+    typedef NumpyArray<2, Singleband<T> > InputType;
+    typedef NumpyArray<3, Multiband<npy_uint8> > OutputType;
+    
+    res.reshapeIfEmpty(valueImage.taggedShape().setChannelCount(colortable.shape(1)),
+                       "pythonApplyColortable: shape of res is wrong");
+    
+    const unsigned int N = colortable.shape(0);
+   
+    for(MultiArrayIndex c=0; c<colortable.shape(1); ++c)
+    {
+        MultiArrayView<2, UInt8>::iterator channelIter = res.bind<2>(c).begin();
+        
+        //make an unstrided copy of the current column of the colortable
+        ArrayVector<UInt8> ctable(colortable.bind<1>(c).begin(), colortable.bind<1>(c).end());
+        
+        for(typename InputType::const_iterator v = valueImage.begin(); v != valueImage.end(); ++v, ++channelIter)
+        {
+            const_cast<UInt8 &>(*channelIter) = ctable[*v % N];
+        }
+    }
+    
+    return res;
+}
+VIGRA_PYTHON_MULTITYPE_FUNCTOR(pyApplyColortable, pythonApplyColortable)
 
+template<class T>
+void pythonGray2QImage_ARGB32Premultiplied(
+    const NumpyArray<2, Singleband<T> >& image, 
+    NumpyArray<3, Multiband<npy_uint8> > qimageView,
+    NumpyArray<1, T> normalize = boost::python::object()
+) 
+{
+    vigra_precondition(image.isUnstrided() || image.transpose().isUnstrided(),
+        "gray2qimage_ARGB32Premultiplied(): Can only handle arrays with contiguous memory.");
+    typedef typename NumericTraits<T>::RealPromote TmpType;
+    
+    T* data = image.data(); 
+    const T* dataEnd = data+image.size();
+    UInt8* imgData = qimageView.data();
+    UInt8 pixel = 0;
+    TmpType pixelF;
+    
+    TmpType normalizeLow, normalizeHigh; 
+    if(normalize != boost::python::object())
+    {
+        vigra_precondition(normalize.shape(0) == 2,
+            "gray2qimage_ARGB32Premultiplied(): normalize.shape[0] == 2 required.");
+            
+        //normalize = None
+        normalizeLow = normalize[0];
+        normalizeHigh = normalize[1];
+        
+        vigra_precondition(normalizeHigh > normalizeLow,
+            "gray2qimage_ARGB32Premultiplied(): normalize[0] < normalize[1] is required.");
+            
+        const TmpType f = TmpType(255) / static_cast<TmpType>(normalizeHigh-normalizeLow);
+        
+        while(data < dataEnd) 
+        {
+            pixelF = detail::RequiresExplicitCast<TmpType>::cast(*data);
+            
+            if(pixelF < normalizeLow) 
+            {
+                pixel = 0;
+            }
+            else if(pixelF > normalizeHigh) 
+            {
+                pixel = 255;
+            }
+            else
+            {
+                pixel = detail::RequiresExplicitCast<UInt8>::cast((pixelF-normalizeLow)*f);
+            }
+            *imgData = pixel; ++imgData; //B
+            *imgData = pixel; ++imgData; //G
+            *imgData = pixel; ++imgData; //R
+            *imgData = 255;   ++imgData; //A
+            ++data;
+        }
+    }
+    else 
+    {
+        while(data < dataEnd) 
+        {
+            pixel = detail::RequiresExplicitCast<UInt8>::cast(*data);
+            *imgData = pixel; ++imgData; //B
+            *imgData = pixel; ++imgData; //G
+            *imgData = pixel; ++imgData; //R
+            *imgData = 255;   ++imgData; //A
+            ++data;
+        }
+    }
+}
+VIGRA_PYTHON_MULTITYPE_FUNCTOR(pyGray2QImage_ARGB32Premultiplied, pythonGray2QImage_ARGB32Premultiplied)
+
+template<class T>
+void pythonAlphaModulated2QImage_ARGB32Premultiplied(
+    const NumpyArray<2, Singleband<T> >& image, 
+    NumpyArray<3, Multiband<npy_uint8> > qimageView,
+    NumpyArray<1, float> tintColor,
+    NumpyArray<1, T> normalize
+) 
+{
+    vigra_precondition(image.isUnstrided() || image.transpose().isUnstrided(),
+        "alphamodulated2qimage_ARGB32Premultiplied(): Can only handle arrays with contiguous memory.");
+    typedef typename NumericTraits<T>::RealPromote TmpType;
+    
+    vigra_precondition(normalize.shape(0) == 2,
+        "alphamodulated2qimage_ARGB32Premultiplied(): normalize.shape[0] == 2 required.");
+    vigra_precondition(tintColor.shape(0) == 3,
+        "alphamodulated2qimage_ARGB32Premultiplied(): tintColor.shape[0] == 3 required.");
+            
+    const TmpType l = normalize[0];
+    const TmpType h = normalize[1];
+    
+    vigra_precondition(h > l,
+        "alphamodulated2qimage_ARGB32Premultiplied(): normalize[0] < normalize[1] is required.");
+    
+    const TmpType r = tintColor[0];
+    const TmpType g = tintColor[1];
+    const TmpType b = tintColor[2];
+    
+    T* data = image.data();
+    const T* dataEnd = image.data()+image.size();
+    unsigned char* imgData = qimageView.data();
+    TmpType pixelF;
+    const TmpType f = TmpType(255) / static_cast<TmpType>(h-l);
+    while(data < dataEnd) 
+    {
+        pixelF = detail::RequiresExplicitCast<TmpType>::cast(*data);
+        if(pixelF < l)
+        {
+            pixelF = TmpType();
+        }
+        else if(pixelF > h)
+        {
+            pixelF = TmpType(255);
+        }
+        else
+        {
+            pixelF = (pixelF-l)*f;
+        }
+        *imgData = detail::RequiresExplicitCast<UInt8>::cast(pixelF*b); ++imgData; //B
+        *imgData = detail::RequiresExplicitCast<UInt8>::cast(pixelF*g); ++imgData; //G
+        *imgData = detail::RequiresExplicitCast<UInt8>::cast(pixelF*r); ++imgData; //R
+        *imgData = detail::RequiresExplicitCast<UInt8>::cast(pixelF);   ++imgData; //A
+        ++data;
+    }
+}
+VIGRA_PYTHON_MULTITYPE_FUNCTOR(pyAlphaModulated2QImage_ARGB32Premultiplied, pythonAlphaModulated2QImage_ARGB32Premultiplied)
 
 void defineColors()
 {
@@ -306,6 +467,39 @@ void defineColors()
 
     docstring_options doc_options(true, true, false);
 
+    multidef("applyColortable", pyApplyColortable<vigra::UInt8, vigra::Int16, vigra::UInt16, vigra::Int32, vigra::UInt32>(),
+        (arg("valueImage"), 
+        arg("colortable"),
+        arg("out")=python::object()), 
+        "Applies a colortable to the given 2D valueImage.\n\n"
+        "Colortable must have 4 columns, each row represents a color (for example, RGBA).\n"
+        "Values in valueImage are first taken module the length of the colortable.\n\n"
+        "Returns: uint8 image with 4 channels\n");
+    
+    multidef("gray2qimage_ARGB32Premultiplied", pyGray2QImage_ARGB32Premultiplied<vigra::UInt8, vigra::Int16, vigra::UInt16, vigra::Int32, vigra::UInt32, float, double>(),
+        (arg("image"), 
+        arg("qimage"),
+        arg("normalize")=python::object()), 
+        "Convert the image (single-band) into a QImage of format Format_ARGB32_Premultiplied.\n"
+        "\n"
+        "import qimage2ndarray\n"
+        "qimg = QImage(a.shape[0], a.shape[1], QImage.Format_ARGB32_Premultiplied)\n"
+        "normalize = numpy.asarray([10, 217], dtype=image.dtype)\n"
+        "vigra.colors.gray2qimage_ARGB32Premultiplied(a, qimage2ndarray.byte_view(qimg), normalize)\n");
+    
+    multidef("alphamodulated2qimage_ARGB32Premultiplied", pyAlphaModulated2QImage_ARGB32Premultiplied<vigra::UInt8, vigra::Int16, vigra::UInt16, vigra::Int32, vigra::UInt32, float, double>(),
+        (arg("image"), 
+        arg("qimage"),
+        arg("tintColor"),
+        arg("normalize")), 
+        "Convert the image (single-band) into a QImage of format Format_ARGB32_Premultiplied.\n"
+        "\n"
+        "import qimage2ndarray\n"
+        "qimg = QImage(a.shape[0], a.shape[1], QImage.Format_ARGB32_Premultiplied)\n"
+        "normalize = numpy.asarray([10, 217], dtype=image.dtype)\n"
+        "tintColor = numpy.asarray([1.0, 0.0, 0.0], dtype=numpy.float32) #RGB\n"
+        "vigra.colors.alphamodulated2qimage_ARGB32Premultiplied(a, qimage2ndarray.byte_view(qimg), tintColor, normalize)\n");
+    
     def("brightness",
          registerConverters(&pythonBrightnessTransform<float, 3>),
          (arg("image"), arg("factor"), arg("range")=make_tuple(0.0, 255.0), arg("out")=object()),

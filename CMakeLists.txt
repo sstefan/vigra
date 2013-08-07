@@ -39,6 +39,19 @@ IF (MSVC)
     ADD_DEFINITIONS(-D_CRT_SECURE_NO_DEPRECATE -D_SCL_SECURE_NO_DEPRECATE)
 ENDIF ()
 
+# if(CMAKE_COMPILER_IS_GNUCXX)
+  # exec_program(
+      # ${CMAKE_CXX_COMPILER}
+      # ARGS                    --version
+      # OUTPUT_VARIABLE _compiler_output)
+  # string(REGEX REPLACE ".*([0-9]\\.[0-9]\\.[0-9]).*" "\\1"  gcc_compiler_version ${_compiler_output})
+  # if(gcc_compiler_version VERSION_LESS "4.4.0")
+      # message(FATAL_ERROR "VIGRA requires at least gcc 4.4")
+  # else()
+      # message(STATUS "Using gcc ${gcc_compiler_version} [${CMAKE_CXX_COMPILER}]")
+  # endif()
+# endif()
+
 ##################################################
 #
 #     search for dependencies
@@ -49,13 +62,27 @@ INCLUDE(VigraFindPackage)
 VIGRA_FIND_PACKAGE(TIFF NAMES libtiff)
 VIGRA_FIND_PACKAGE(JPEG NAMES libjpeg)
 VIGRA_FIND_PACKAGE(PNG)
-VIGRA_FIND_PACKAGE(FFTW3 NAMES libfftw3-3)
-VIGRA_FIND_PACKAGE(FFTW3F NAMES libfftw3f-3)
+VIGRA_FIND_PACKAGE(FFTW3 NAMES libfftw3-3 libfftw-3.3)
+VIGRA_FIND_PACKAGE(FFTW3F NAMES libfftw3f-3 libfftwf-3.3)
+
 IF(WITH_OPENEXR)
     VIGRA_FIND_PACKAGE(OpenEXR)
 ENDIF()
+
 IF(WITH_HDF5)
     VIGRA_FIND_PACKAGE(HDF5)
+ENDIF()
+
+IF(WITH_BOOST_GRAPH)
+    IF(WITH_VIGRANUMPY)
+        VIGRA_FIND_PACKAGE( Boost 1.40.0 COMPONENTS python )
+    else()
+        VIGRA_FIND_PACKAGE( Boost 1.40.0 )
+    endif()
+ENDIF()
+
+IF(WITH_LEMON)
+    VIGRA_FIND_PACKAGE(LEMON)
 ENDIF()
 
 SET(DOXYGEN_SKIP_DOT TRUE)
@@ -273,9 +300,26 @@ ELSE()
     MESSAGE( STATUS "  HDF5 libraries not found (HDF5 support disabled)" )
 ENDIF()
 
+IF(Boost_FOUND)
+    MESSAGE( STATUS "  Using Boost Graph Library: ${Boost_INCLUDE_DIR}/boost/graph" )
+ELSEIF(NOT WITH_BOOST_GRAPH)
+    MESSAGE( STATUS "  Boost Graph Library disabled by user (WITH_BOOST_GRAPH=0)" )
+ELSE()
+    MESSAGE( STATUS "  Boost Graph Library not found (support disabled)" )
+ENDIF()
+
+IF(LEMON_FOUND)
+    MESSAGE( STATUS "  Using LEMON graph library: ${LEMON_LIBRARY}" )
+ELSEIF(NOT WITH_LEMON)
+    MESSAGE( STATUS "  LEMON graph library disabled by user (WITH_LEMON=0)" )
+ELSE()
+    MESSAGE( STATUS "  LEMON graph library not found (support disabled)" )
+ENDIF()
+
 IF(WITH_VIGRANUMPY)
     IF(VIGRANUMPY_DEPENDENCIES_FOUND)
         MESSAGE( STATUS "  Using Python libraries: ${VIGRANUMPY_LIBRARIES}" )
+        MESSAGE( STATUS "  Using Numpy includes:   ${PYTHON_NUMPY_INCLUDE_DIR}" )
     ELSE()
         MESSAGE( STATUS "  Vigranumpy dependencies not found (vigranumpy disabled)" )
     ENDIF()

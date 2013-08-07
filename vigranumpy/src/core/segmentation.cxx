@@ -45,10 +45,15 @@
 #include <vigra/labelvolume.hxx>
 #include <vigra/watersheds3d.hxx>
 #include <vigra/seededregiongrowing3d.hxx>
+#include <vigra/multi_watersheds.hxx>
+#include <vigra/convolution.hxx>
+#include <vigra/multi_convolution.hxx>
+#include <vigra/slic.hxx>
 
 #include <string>
 #include <cmath>
-#include <ctype.h> // tolower()
+
+#include "tws.hxx"
 
 namespace python = boost::python;
 
@@ -212,6 +217,8 @@ VIGRA_PYTHON_MULTITYPE_FUNCTOR(pyLabelVolumeWithBackground, pythonLabelVolumeWit
 
 /*********************************************************************************/
 
+// FIXME: support output of label images from localMinim/Maxima functions
+
 template < class PixelType >
 NumpyAnyArray 
 pythonLocalMinima2D(NumpyArray<2, Singleband<PixelType> > image,
@@ -321,6 +328,8 @@ pythonExtendedLocalMinima2D(NumpyArray<2, Singleband<PixelType> > image,
     }
     return res;
 }
+
+VIGRA_PYTHON_MULTITYPE_FUNCTOR(pyExtendedLocalMinima2D, pythonExtendedLocalMinima2D)
 
 template<class PixelType>
 NumpyAnyArray 
@@ -517,8 +526,7 @@ pythonWatersheds2DOld(NumpyArray<2, Singleband<PixelType> > image,
     vigra_precondition(neighborhood == 4 || neighborhood == 8,
            "watersheds2D(): neighborhood must be 4 or 8.");
 
-    for(unsigned int k=0; k<method.size(); ++k)
-        method[k] = (std::string::value_type)tolower(method[k]);
+    method = tolower(method);
     
     bool haveSeeds = seeds.hasData();
     unsigned int maxRegionLabel = 0;
@@ -592,7 +600,7 @@ python::tuple
 pythonWatersheds2D(NumpyArray<2, Singleband<PixelType> > image,
                    int neighborhood = 4,
                    NumpyArray<2, Singleband<npy_uint32> > seeds = NumpyArray<2, Singleband<npy_uint32> >(),
-                   std::string method = "RegionGrowing", 
+                   std::string method = "", 
                    SRGType srgType = CompleteGrow, 
                    PixelType max_cost = 0.0, 
                    NumpyArray<2, Singleband<npy_uint32> > res = NumpyArray<2, Singleband<npy_uint32> >())
@@ -600,11 +608,15 @@ pythonWatersheds2D(NumpyArray<2, Singleband<PixelType> > image,
     vigra_precondition(neighborhood == 4 || neighborhood == 8,
            "watersheds2D(): neighborhood must be 4 or 8.");
 
-    for(unsigned int k=0; k<method.size(); ++k)
-        method[k] = (std::string::value_type)tolower(method[k]);
+    method = tolower(method);
     if(method == "")
-        method = "regiongrowing";
-        
+    {
+        if(IsSameType<PixelType, npy_uint8>::value)
+            method = "turbo";
+        else
+            method = "regiongrowing";
+    }
+    
     std::string description("watershed labeling, neighborhood=");
     description += asString(neighborhood);
     
@@ -629,7 +641,18 @@ pythonWatersheds2D(NumpyArray<2, Singleband<PixelType> > image,
     }
     else
     {
-        options.seedOptions(SeedOptions().minima());
+        if(method == "turbo")
+            options.seedOptions(SeedOptions().extendedMinima());
+        else
+            options.seedOptions(SeedOptions().minima());
+    }
+    
+    if(method == "turbo")
+    {
+        vigra_precondition((IsSameType<PixelType, npy_uint8>::value),
+           "watersheds(): Turbo method only works for uint8 images.");
+        options.turboAlgorithm();
+        method = "regiongrowing";
     }
     
     npy_uint32 maxRegionLabel = 0;
@@ -674,6 +697,113 @@ pythonWatersheds2D(NumpyArray<2, Singleband<PixelType> > image,
 
 VIGRA_PYTHON_MULTITYPE_FUNCTOR(pywatersheds2D, pythonWatersheds2D)
 
+template <unsigned int N, class PixelType >
+python::tuple 
+pythonWatershedsNew(NumpyArray<N, Singleband<PixelType> > image,
+                    int neighborhood = 0,
+                    NumpyArray<N, Singleband<npy_uint32> > seeds = NumpyArray<N, Singleband<npy_uint32> >(),
+                    std::string method = "", 
+                    SRGType srgType = CompleteGrow, 
+                    PixelType max_cost = 0.0, 
+                    NumpyArray<N, Singleband<npy_uint32> > res = NumpyArray<N, Singleband<npy_uint32> >())
+{
+    method = tolower(method);
+    if(method == "" || method == "turbo")
+    {
+        method = "regiongrowing";
+    }
+    
+    std::string description("watershed labeling, neighborhood=");
+    description += asString(neighborhood);
+    
+    res.reshapeIfEmpty(image.taggedShape().setChannelDescription(description), 
+            "watersheds(): Output array has wrong shape.");
+    
+    WatershedOptions options;
+    options.srgType(srgType);
+    
+    if(method == "regiongrowing")
+    {
+        options.regionGrowing();
+    }
+    else if(method == "unionfind")
+    {
+        options.unionFind();
+    }
+    else
+    {
+        vigra_precondition(false, "watersheds(): Unknown watershed method requested.");
+    }
+    
+    if(max_cost > 0.0)
+    {
+        vigra_precondition(method != "unionfind",
+           "watersheds(): UnionFind does not support a cost threshold.");
+        options.stopAtThreshold(max_cost);
+    }
+    
+    if(seeds.hasData())
+    {
+        vigra_precondition(method != "unionfind",
+           "watersheds(): UnionFind does not support seed images.");
+        res = seeds;
+    }
+    else
+    {
+        options.seedOptions(SeedOptions().extendedMinima());
+    }
+    
+    NeighborhoodType n = (neighborhood == 0)
+                             ? DirectNeighborhood
+                             : IndirectNeighborhood;    
+    npy_uint32 maxRegionLabel = 0;
+    {
+        PyAllowThreads _pythread;
+        maxRegionLabel = watershedsMultiArray(image, res, n, options);
+    }
+
+    return python::make_tuple(res, maxRegionLabel);
+}
+
+template <class PixelType >
+python::tuple 
+pythonWatersheds2DNew(NumpyArray<2, Singleband<PixelType> > image,
+                      int neighborhood = 4,
+                      NumpyArray<2, Singleband<npy_uint32> > seeds = NumpyArray<2, Singleband<npy_uint32> >(),
+                      std::string method = "", 
+                      SRGType srgType = CompleteGrow, 
+                      PixelType max_cost = 0.0, 
+                      NumpyArray<2, Singleband<npy_uint32> > res = NumpyArray<2, Singleband<npy_uint32> >())
+{
+    vigra_precondition(neighborhood == 4 || neighborhood == 8,
+           "watersheds2D(): neighborhood must be 4 or 8.");
+    neighborhood = (neighborhood == 4)
+                        ? 0
+                        : 1;
+    return pythonWatershedsNew(image, neighborhood, seeds, method, srgType, max_cost, res);
+}
+
+template <class PixelType >
+python::tuple 
+pythonWatersheds3DNew(NumpyArray<3, Singleband<PixelType> > image,
+                      int neighborhood = 6,
+                      NumpyArray<3, Singleband<npy_uint32> > seeds = NumpyArray<3, Singleband<npy_uint32> >(),
+                      std::string method = "", 
+                      SRGType srgType = CompleteGrow, 
+                      PixelType max_cost = 0.0, 
+                      NumpyArray<3, Singleband<npy_uint32> > res = NumpyArray<3, Singleband<npy_uint32> >())
+{
+    vigra_precondition(neighborhood == 6 || neighborhood == 26,
+           "watersheds3D(): neighborhood must be 6 or 26.");
+    neighborhood = (neighborhood == 6)
+                        ? 0
+                        : 1;
+    return pythonWatershedsNew(image, neighborhood, seeds, method, srgType, max_cost, res);
+}
+
+VIGRA_PYTHON_MULTITYPE_FUNCTOR(pywatersheds2DNew, pythonWatersheds2DNew)
+VIGRA_PYTHON_MULTITYPE_FUNCTOR(pywatersheds3DNew, pythonWatersheds3DNew)
+
 template < class PixelType >
 python::tuple 
 pythonWatersheds3D(NumpyArray<3, Singleband<PixelType> > image,
@@ -687,16 +817,33 @@ pythonWatersheds3D(NumpyArray<3, Singleband<PixelType> > image,
     vigra_precondition(neighborhood == 6 || neighborhood == 26,
            "watersheds3D(): neighborhood must be 6 or 26.");
 
-    for(unsigned int k=0; k<method.size(); ++k)
-        method[k] = (std::string::value_type)tolower(method[k]);
+    method = tolower(method);
     
     bool haveSeeds = seeds.hasData();
     unsigned int maxRegionLabel;
     
     if(method == "")
-        method = "regiongrowing";
+    {
+        if(IsSameType<PixelType, npy_uint8>::value)
+            method = "turbo";
+        else
+            method = "regiongrowing";
+    }
     
-    if(method == "regiongrowing")
+    if(method == "turbo")
+    {
+        vigra_precondition((Or<typename IsSameType<PixelType, npy_uint8>::type,
+                               typename IsSameType<PixelType, float>::type>::value),
+           "watersheds3D(): Turbo algorithm requires input dtype = uint8 or dtype = float.");
+        vigra_precondition(neighborhood == 6,
+           "watersheds3D(): Turbo algorithm requires neighborhood = 6.");
+        vigra_precondition(srgType == CompleteGrow,
+           "watersheds3D(): Turbo algorithm requires termination = CompleteGrow.");
+        vigra_precondition(max_cost == 0,
+           "watersheds3D(): Turbo algorithm doesn't support 'max_cost'.");
+    }
+    
+    if(method == "regiongrowing" || method == "turbo")
     {
         std::string description("watershed seeds");
         
@@ -708,49 +855,23 @@ pythonWatersheds3D(NumpyArray<3, Singleband<PixelType> > image,
             PyAllowThreads _pythread;
             maxRegionLabel = 0;
             
-            // determine seeds
-            // FIXME: implement localMinima() for volumes
-            typedef NeighborCode3DTwentySix Neighborhood;
-            typedef Neighborhood::Direction Direction;
+            MultiArray<3, npy_uint32> minima(seeds.shape());
             
-            MultiArrayShape<3>::type p(0,0,0);
-            
-            for(p[2]=0; p[2]<image.shape(2); ++p[2])
+            if (neighborhood ==6)
             {
-                for(p[1]=0; p[1]<image.shape(1); ++p[1])
-                {
-                    for(p[0]=0; p[0]<image.shape(0); ++p[0])
-                    {
-                        AtVolumeBorder atBorder = isAtVolumeBorder(p, image.shape());
-                        int totalCount = Neighborhood::nearBorderDirectionCount(atBorder),
-                            minimumCount = 0;
-                        if(atBorder == NotAtBorder)
-                        {
-                            for(int k=0; k<totalCount; ++k)
-                            {
-                                if(image[p] < image[p+Neighborhood::diff((Direction)k)])
-                                    ++minimumCount;
-                            }
-                        }
-                        else
-                        {
-                            for(int k=0; k<totalCount; ++k)
-                            {
-                                if(image[p] < image[p+Neighborhood::diff(
-                                                        Neighborhood::nearBorderDirections(atBorder, k))])
-                                    ++minimumCount;
-                            }
-                        }
-                        if(minimumCount == totalCount)
-                        {
-                            seeds[p] = ++maxRegionLabel;
-                        }
-                        else
-                        {
-                            seeds[p] = 0;
-                        }
-                    }
-                }
+                extendedLocalMinima3D(srcMultiArrayRange(image), destMultiArray(minima),
+                                      (npy_uint32)1, NeighborCode3DSix());
+                maxRegionLabel = labelVolumeWithBackground(srcMultiArrayRange(minima),
+                                          destMultiArray(seeds), NeighborCode3DSix(),
+                                          (npy_uint32)0);
+            }
+            else
+            {
+                extendedLocalMinima3D(srcMultiArrayRange(image), destMultiArray(minima),
+                                      (npy_uint32)1, NeighborCode3DTwentySix());
+                maxRegionLabel = labelVolumeWithBackground(srcMultiArrayRange(minima),
+                                          destMultiArray(seeds), NeighborCode3DTwentySix(),
+                                          (npy_uint32)0);
             }
         }
         else
@@ -771,9 +892,18 @@ pythonWatersheds3D(NumpyArray<3, Singleband<PixelType> > image,
         ArrayOfRegionStatistics< SeedRgDirectValueFunctor< PixelType > > stats(maxRegionLabel);
         if(neighborhood == 6)
         {
-            seededRegionGrowing3D(srcMultiArrayRange(image), srcMultiArray(seeds), 
-                                  destMultiArray(res), 
-                                  stats, srgType, NeighborCode3DSix(), max_cost);
+            if(method == "turbo")
+            {
+                res = seeds;
+                
+                TWS<PixelType>::exec(image, res);
+            }
+            else
+            {
+                seededRegionGrowing3D(srcMultiArrayRange(image), srcMultiArray(seeds), 
+                                      destMultiArray(res), 
+                                      stats, srgType, NeighborCode3DSix(), max_cost);
+            }
         }
         else
         {
@@ -815,13 +945,78 @@ pythonWatersheds3D(NumpyArray<3, Singleband<PixelType> > image,
 
 VIGRA_PYTHON_MULTITYPE_FUNCTOR(pywatersheds3D, pythonWatersheds3D)
 
+template <unsigned int N, class PixelType >
+python::tuple 
+pythonSlic(NumpyArray<N, PixelType > array,
+           double intensityScaling,
+           unsigned int seedDistance,
+           unsigned int minSize = 0,            // choose minSize automatically 
+           unsigned int iterations = 10, 
+           NumpyArray<N, Singleband<npy_uint32> > res = NumpyArray<N, Singleband<npy_uint32> >())
+{
+    typedef typename detail::ResolveMultiband<PixelType>::type ValueType;
+    typedef typename NormTraits<ValueType>::NormType TmpType;
+    typedef typename NumpyArray<N, ValueType >::view_type View;
+    
+    std::string description("Slic superpixels");
+    
+    res.reshapeIfEmpty(array.taggedShape().setChannelDescription(description), 
+            "slicSuperpixels(): Output array has wrong shape.");
+    
+    npy_uint32 maxRegionLabel = 0;
+    {
+        PyAllowThreads _pythread;
+        
+        MultiArray<N, TmpType> gradMag(array.shape());
+        
+        // the original code uses the symmetric difference instead of a Gaussian gradient
+        gaussianGradientMagnitude(array, gradMag, 1.0);
+        // search radius of 1 is also used in the original code
+        generateSlicSeeds(gradMag, res, seedDistance, 1);
+        
+        maxRegionLabel = slicSuperpixels(array, res, intensityScaling, seedDistance,
+                                         SlicOptions().iterations(iterations)
+                                                      .minSize(minSize));
+    }
+
+    return python::make_tuple(res, maxRegionLabel);
+}
+
+template <class PixelType >
+python::tuple 
+pythonSlic2D(NumpyArray<2, PixelType > image,
+             double intensityScaling,
+             unsigned int seedDistance,
+             unsigned int minSize = 0,            // choose minSize automatically 
+             unsigned int iterations = 10, 
+             NumpyArray<2, Singleband<npy_uint32> > res = NumpyArray<2, Singleband<npy_uint32> >())
+{
+    return pythonSlic(image, intensityScaling, seedDistance, minSize, iterations, res);
+}
+
+VIGRA_PYTHON_MULTITYPE_FUNCTOR(pySlic2D, pythonSlic2D)
+
+template <class PixelType >
+python::tuple 
+pythonSlic3D(NumpyArray<3, PixelType > image,
+             double intensityScaling,
+             unsigned int seedDistance,
+             unsigned int minSize = 0,            // choose minSize automatically 
+             unsigned int iterations = 10, 
+             NumpyArray<3, Singleband<npy_uint32> > res = NumpyArray<3, Singleband<npy_uint32> >())
+{
+    return pythonSlic(image, intensityScaling, seedDistance, minSize, iterations, res);
+}
+
+VIGRA_PYTHON_MULTITYPE_FUNCTOR(pySlic3D, pythonSlic3D)
+
 void defineSegmentation()
 {
     using namespace python;
     
     docstring_options doc_options(true, true, false);
 
-    multidef("labelImage", pyLabelImage<npy_uint8, float>(),
+    multidef("labelImage", pyLabelImage<npy_uint8, npy_uint32, float>(),
         (arg("image"), 
         arg("neighborhood") = 4,
         arg("out")=python::object()),
@@ -829,7 +1024,7 @@ void defineSegmentation()
         "the pixel neighborhood to be used and can be 4 (default) or 8.\n\n"
         "For details see labelImage_ in the vigra C++ documentation.\n");
 
-    multidef("labelImageWithBackground", pyLabelImageWithBackground<npy_uint8, float>(),
+    multidef("labelImageWithBackground", pyLabelImageWithBackground<npy_uint8, npy_uint32, float>(),
         (arg("image"), 
         arg("neighborhood") = 4,
         arg("background_value") = 0,
@@ -883,8 +1078,20 @@ void defineSegmentation()
                 "6 or 26 (default).\n\n"
                 "For details see localMinima3D_ in the vigra C++ documentation.\n");
 
-    def("extendedLocalMinima",
-        registerConverters(&pythonExtendedLocalMinima2D<float>),
+    // def("extendedLocalMinima",
+        // registerConverters(&pythonExtendedLocalMinima2D<float>),
+        // (arg("image"), 
+         // arg("marker")=1.0, 
+         // arg("neighborhood") = 8,
+         // arg("out")=python::object()),
+        // "Find local minima and minimal plateaus in an image and mark them with "
+        // "the given 'marker'. Parameter 'neighborhood' specifies the pixel "
+        // "neighborhood to be used and can be 4 or 8 (default).\n\n"
+        // "For details see extendedLocalMinima_ in the vigra C++ documentation.\n"
+        // );
+
+    multidef("extendedLocalMinima",
+        pyExtendedLocalMinima2D<npy_uint8, float>(),
         (arg("image"), 
          arg("marker")=1.0, 
          arg("neighborhood") = 8,
@@ -953,7 +1160,7 @@ void defineSegmentation()
       (arg("image"), 
        arg("neighborhood") = 4, 
        arg("seeds")=python::object(), 
-       arg("method")="RegionGrowing",
+       arg("method")="",
        arg("terminate")=CompleteGrow,
        arg("max_cost")=0,
        arg("out")=python::object()),
@@ -974,12 +1181,14 @@ void defineSegmentation()
         "      3-dimensional data:\n"
         "        6 (default) or 26\n\n"
         " seeds:\n"
-        "    a label image specifying region seeds, only supported by method 'RegionGrowing' "
+        "    a label image specifying region seeds, only supported by methods 'RegionGrowing' and 'Turbo'"
         "    (with dtype=numpy.uint32).\n" 
         " method:\n"
         "    the algorithm to be used for watershed computation. Possible values:\n\n"
+        "      'Turbo':\n"
+        "        (default if input dtype == uint8) use fastSeededRegionGrowing_ or tws() respectively\n"
         "      'RegionGrowing':\n"
-        "        (default) use seededRegionGrowing_ or seededRegionGrowing3D_ respectively\n"
+        "        (default if input dtype != uint8) use seededRegionGrowing_ or seededRegionGrowing3D_ respectively\n"
         "      'UnionFind:\n"
         "        use watershedsUnionFind_ or watersheds3D_ respectively\n\n"
         " terminate:\n"
@@ -1008,15 +1217,71 @@ void defineSegmentation()
       (arg("volume"), 
        arg("neighborhood") = 6, 
        arg("seeds")=python::object(), 
-       arg("method")="RegionGrowing",
+       arg("method")="",
        arg("terminate")=CompleteGrow,
        arg("max_cost")=0,
        arg("out")=python::object()),
        "Likewise, compute watersheds of a volume.\n");
+
+    multidef("watershedsNew", pywatersheds2DNew< npy_uint8, float >(),
+      (arg("image"), 
+       arg("neighborhood") = 4, 
+       arg("seeds")=python::object(), 
+       arg("method")="",
+       arg("terminate")=CompleteGrow,
+       arg("max_cost")=0,
+       arg("out")=python::object()),
+       "graph-based watershed");
+
+    multidef("watershedsNew", pywatersheds3DNew< npy_uint8, float >(),
+      (arg("image"), 
+       arg("neighborhood") = 6, 
+       arg("seeds")=python::object(), 
+       arg("method")="",
+       arg("terminate")=CompleteGrow,
+       arg("max_cost")=0,
+       arg("out")=python::object()),
+       "graph-based watershed");
+
+    multidef("slicSuperpixels", pySlic2D< TinyVector<float, 3>, Singleband<float> >(),
+      (arg("image"), 
+       arg("intensityScaling"), 
+       arg("seedDistance"), 
+       arg("minSize")=0,
+       arg("iterations")=10,
+       arg("out")=python::object()),
+        "Compute Slic superpixels for a 2D image.\n\n"
+
+        "Parameters:\n\n"
+        " image:\n"
+        "    The 2D-image on which the superpixels will be calculated. Accepts single- and threeband images. \n\n"
+        " intensityScaling:\n"
+        "    Scale (divide) color/intensity difference by this parameter before comparing to spatial distance. \n\n"
+        " seedDistance:\n"
+        "    specify the radius of the window around each seed in which the algorithm looks for potential members of the corresponding superpixel"
+        " thus limiting the superpixel size. The grid spacing for seed placement is determined by this parameter.\n\n"
+        " minSize:\n"
+        "    Minimum size for superpixels. By default the algorithm merges all regions smaller than a quarter of the average superpixel size.\n\n"
+        " iterations:\n"
+        "    Specify number of iterations. The default is 10."
+        " out:\n"
+        "    The label image (with dtype=numpy.uint32) to be filled by the algorithm. "
+        "    It will be allocated by the slicSuperpixels function if not provided)\n\n"
+        "The function returns a Python tuple (labelImage, maxRegionLabel)\n\n");
+
+    multidef("slicSuperpixels", pySlic3D< TinyVector<float, 3>, Singleband<float> >(),
+      (arg("image"), 
+       arg("intensityScaling"), 
+       arg("seedDistance"), 
+       arg("minSize")=0,
+       arg("iterations")=10,
+       arg("out")=python::object()),
+       "Likewise compute Slic superpixels for a 3D volume, either single- or threeband.\n");
 }
 
 void defineEdgedetection();
 void defineInterestpoints();
+void defineAccumulators();
 
 } // namespace vigra
 
@@ -1029,4 +1294,5 @@ BOOST_PYTHON_MODULE_INIT(analysis)
     defineSegmentation();
     defineEdgedetection();
     defineInterestpoints();
+    defineAccumulators();
 }

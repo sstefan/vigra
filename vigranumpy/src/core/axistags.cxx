@@ -181,12 +181,12 @@ AxisTags *
 AxisTags_create(python::object i1, python::object i2,
                 python::object i3, python::object i4, python::object i5)
 {
-    std::auto_ptr<AxisTags> res(new AxisTags());
+    VIGRA_UNIQUE_PTR<AxisTags> res(new AxisTags());
     
     python::extract<AxisTags const &> tags(i1);
     if(tags.check())
     {
-        res = std::auto_ptr<AxisTags>(new AxisTags(tags()));
+        res = VIGRA_UNIQUE_PTR<AxisTags>(new AxisTags(tags()));
     }
     else if(PySequence_Check(i1.ptr()))
     {
@@ -375,7 +375,7 @@ AxisTags_permutationToOrder(AxisTags const & axistags, std::string const & order
 AxisTags *
 AxisTags_transform(AxisTags const & oldTags, python::object index, int lnew)
 {
-    std::auto_ptr<AxisTags> newTags(new AxisTags());
+    VIGRA_UNIQUE_PTR<AxisTags> newTags(new AxisTags());
     python::object ellipsis = python::object(python::detail::borrowed_reference(Py_Ellipsis));
     int lold = oldTags.size();
     if(!PySequence_Check(index.ptr()))
@@ -661,7 +661,8 @@ void defineAxisTags()
         .def("index", &AxisTags::index,
              "Get the axis index of a given axis key::\n\n"
              "    >>> axistags.index('x')\n"
-             "    0   # the 'x' axis is first index\n\n")
+             "    0\n\n"     
+             "In this example, the 'x'-axis corresponds to index 0 (i.e. the first index).\n")
         .add_property("channelIndex", &AxisTags::channelIndex,
             "(read-only property, type 'int') the index of the channel axis, or ``len(axistags)``\n"
             "when no channel axis exists (i.e. ``axistags.channelIndex`` is similar to\n"

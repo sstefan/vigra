@@ -7,6 +7,12 @@ IF(VIGRANUMPY_DEPENDENCIES_FOUND)
 
     INCLUDE_DIRECTORIES(${VIGRANUMPY_INCLUDE_DIRS})
 
+    # configure boost's autolink magic to use the right library name
+    # (default on Windows is a mangled name like 'boost_python-vc110-mt-1_51.lib')
+    if("${Boost_PYTHON_LIBRARY}" MATCHES "boost_python\\.lib")
+        ADD_DEFINITIONS(-DBOOST_AUTO_LINK_NOMANGLE)
+    endif()
+        
     IF(HDF5_FOUND)
         ADD_DEFINITIONS(-DHasHDF5 ${HDF5_CPPFLAGS})
         INCLUDE_DIRECTORIES(${HDF5_INCLUDE_DIR})
@@ -46,6 +52,26 @@ IF(VIGRANUMPY_DEPENDENCIES_FOUND)
                            WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
                            COMMENT "Creating vigranumpy setup in ${CMAKE_CURRENT_BINARY_DIR}/dist")        
     ENDIF()
+    
+    set(VIGRANUMPY_CONFIG_INSTALL_PATH lib${LIB_SUFFIX}/vigranumpy)
+    
+    set(VIGRANUMPY_INCLUDE_RELATIVE "")
+    foreach(PATH ${CMAKE_INSTALL_PREFIX}/include ${VIGRANUMPY_INCLUDE_DIRS})
+        file(RELATIVE_PATH RELPATH ${CMAKE_INSTALL_PREFIX}/${VIGRANUMPY_CONFIG_INSTALL_PATH} ${PATH})
+        set(VIGRANUMPY_INCLUDE_RELATIVE ${VIGRANUMPY_INCLUDE_RELATIVE} ${RELPATH})
+    endforeach(PATH)
+    
+    set(VIGRANUMPY_LIBRARIES_RELATIVE "")
+    foreach(PATH ${VIGRANUMPY_LIBRARIES})
+        file(RELATIVE_PATH RELPATH ${CMAKE_INSTALL_PREFIX}/${VIGRANUMPY_CONFIG_INSTALL_PATH} ${PATH})
+        set(VIGRANUMPY_LIBRARIES_RELATIVE ${VIGRANUMPY_LIBRARIES_RELATIVE} ${RELPATH})
+    endforeach(PATH)
+    
+    CONFIGURE_FILE(${PROJECT_SOURCE_DIR}/config/VigranumpyConfig.cmake.in
+            ${PROJECT_BINARY_DIR}/lib/vigranumpy/CMake/VigranumpyConfig.cmake
+            @ONLY IMMEDIATE)
+    INSTALL(FILES ${PROJECT_BINARY_DIR}/lib/vigranumpy/CMake/VigranumpyConfig.cmake
+            DESTINATION ${VIGRANUMPY_CONFIG_INSTALL_PATH})
 ENDIF()
 
 

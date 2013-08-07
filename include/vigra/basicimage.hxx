@@ -42,6 +42,7 @@
 #include "iteratortraits.hxx"
 #include "accessor.hxx"
 #include "memory.hxx"
+#include "basicimageview.hxx"
 
 // Bounds checking Macro used if VIGRA_CHECK_BOUNDS is defined.
 #ifdef VIGRA_CHECK_BOUNDS
@@ -117,7 +118,7 @@ class LineBasedColumnIteratorPolicy
 /** Implementation of the standard image iterator for \ref vigra::BasicImage.
     See \ref vigra::ImageIterator for documentation.
 
-    <b>\#include</b> \<vigra/basicimage.hxx\>
+    <b>\#include</b> \<vigra/basicimage.hxx\> <br/>
     Namespace: vigra
 */
 template <class IMAGEITERATOR, class PIXELTYPE,
@@ -254,7 +255,7 @@ class BasicImageIteratorBase
 /** Implementation of the standard image iterator for \ref vigra::BasicImage.
     See \ref vigra::ImageIterator for documentation.
 
-    <b>\#include</b> \<vigra/basicimage.hxx\>
+    <b>\#include</b> \<vigra/basicimage.hxx\> <br/>
     Namespace: vigra
 */
 template <class PIXELTYPE, class ITERATOR>
@@ -286,7 +287,7 @@ class BasicImageIterator
 /** Implementation of the standard const image iterator for \ref vigra::BasicImage.
     See \ref vigra::ConstImageIterator for documentation.
 
-    <b>\#include</b> \<vigra/basicimage.hxx\>
+    <b>\#include</b> \<vigra/basicimage.hxx\> <br/>
     Namespace: vigra
 */
 template <class PIXELTYPE, class ITERATOR>
@@ -465,8 +466,7 @@ VIGRA_DEFINE_ITERATORTRAITS(VIGRA_PIXELTYPE)
     A customized memory allocator can be specified as a templated argument
     and passed in the constructor.
 
-    <b>\#include</b> \<vigra/basicimage.hxx\>
-
+    <b>\#include</b> \<vigra/basicimage.hxx\> <br/>
     Namespace: vigra
 */
 template <class PIXELTYPE, class Alloc = std::allocator<PIXELTYPE> >

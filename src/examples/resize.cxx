@@ -29,114 +29,136 @@
 /*    HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,      */
 /*    WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING      */
 /*    FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR     */
-/*    OTHER DEALINGS IN THE SOFTWARE.                                   */                
+/*    OTHER DEALINGS IN THE SOFTWARE.                                   */
 /*                                                                      */
 /************************************************************************/
- 
+
 
 #include <iostream>
-#include "vigra/stdimage.hxx"
-#include "vigra/resizeimage.hxx"
-#include "vigra/impex.hxx"
+#include <vigra/multi_array.hxx>
+#include <vigra/rgbvalue.hxx>
+#include <vigra/resizeimage.hxx>
+#include <vigra/impex.hxx>
 
-using namespace vigra; 
+template<class ImageType>
+bool resizeImageFile(const vigra::ImageImportInfo &info, const vigra::Shape2 &newSize,
+                     int method, const char *outputFilename)
+{
+    // create a gray scale image of appropriate size
+    ImageType in(info.shape());
+    ImageType out(newSize);
+
+    // import the image just read
+    importImage(info, destImage(in));
+
+    using vigra::BSpline;
+
+    switch(method)
+    {
+      case 0:
+        // equiv. to resizeImageSplineInterpolation with BSpline<0, double>:
+        resizeImageNoInterpolation(in, out);
+        break;
+      case 1:
+        // equiv. to resizeImageSplineInterpolation with BSpline<1, double>:
+        resizeImageLinearInterpolation(in, out);
+        break;
+      case 2:
+        resizeImageSplineInterpolation(in, out,
+                                       BSpline<2, double>());
+        break;
+      case 3:
+        resizeImageSplineInterpolation(in, out,
+                                       BSpline<3, double>());
+        break;
+      case 4:
+        resizeImageSplineInterpolation(in, out,
+                                       BSpline<4, double>());
+        break;
+      case 5:
+        resizeImageSplineInterpolation(in, out,
+                                       BSpline<5, double>());
+        break;
+      case 6:
+        resizeImageSplineInterpolation(in, out,
+                                       BSpline<6, double>());
+        break;
+      case 7:
+        resizeImageSplineInterpolation(in, out,
+                                       BSpline<7, double>());
+        break;
+      default:
+        std::cerr << "Invalid method " << method << " (must be 0..7)!\n";
+        return false;
+    }
+
+    // write the image to the file given as second argument
+    // the file type will be determined from the file name's extension
+    exportImage(out, vigra::ImageExportInfo(outputFilename));
+    return true;
+}
 
 int main(int argc, char ** argv)
 {
-    if(argc != 3)
+    using namespace vigra;
+    
+    if((argc < 3) || (argc > 5))
     {
-        std::cout << "Usage: " << argv[0] << " infile outfile" << std::endl;
-        std::cout << "(supported formats: " << vigra::impexListFormats() << ")" << std::endl;
-        
+        std::cout << "Usage: " << argv[0] << " infile outfile [factor] [method]" << std::endl;
+        std::cout << "(supported formats: " << impexListFormats() << ")" << std::endl;
+        std::cout << "If factor or method are not provided, you will be asked for\nthem on the command line." << std::endl;
+
         return 1;
     }
-    
+
     try
     {
         // read image given as first argument
         // file type is determined automatically
-        vigra::ImageImportInfo info(argv[1]);
-        
-        double sizefactor;
-        std::cerr << "Resize factor ? ";
-        std::cin >> sizefactor;
-        int method;
-        std::cerr << "Method (0 - pixel repetition, 1 - linear, 2 - spline ? ";
-        std::cin >> method;
-        
-        // calculate new image size
-        int nw = (int)(sizefactor*(info.width()-1) + 1.5);
-        int nh = (int)(sizefactor*(info.height()-1) + 1.5);
-        
-        if(info.isGrayscale())
-        {
-            // create a gray scale image of appropriate size
-            vigra::BImage in(info.width(), info.height());
-            vigra::BImage out(nw, nh);
-            
-            // import the image just read
-            importImage(info, destImage(in));
-            
-            switch(method)
-            {
-              case 0:
-                // resize the image, using a bi-cubic spline algorithms
-                resizeImageNoInterpolation(srcImageRange(in), 
-                    destImageRange(out));
-                break;
-              case 1:
-                // resize the image, using a bi-cubic spline algorithms
-                resizeImageLinearInterpolation(srcImageRange(in), 
-                    destImageRange(out));
-                break;
-              default:
-                // resize the image, using a bi-cubic spline algorithms
-                resizeImageSplineInterpolation(srcImageRange(in), 
-                    destImageRange(out));
-            }
+        ImageImportInfo info(argv[1]);
 
-            // write the image to the file given as second argument
-            // the file type will be determined from the file name's extension
-            exportImage(srcImageRange(out), vigra::ImageExportInfo(argv[2]));
+        double sizefactor;
+        if(argc > 3)
+        {
+            sizefactor = atof(argv[3]);
         }
         else
         {
-            // create a RGB image of appropriate size
-            vigra::BRGBImage in(info.width(), info.height());
-            vigra::BRGBImage out(nw, nh);
-            
-            // import the image just read
-            importImage(info, destImage(in));
-            
-            switch(method)
-            {
-              case 0:
-                // resize the image, using a bi-cubic spline algorithms
-                resizeImageNoInterpolation(srcImageRange(in), 
-                    destImageRange(out));
-                break;
-              case 1:
-                // resize the image, using a bi-cubic spline algorithms
-                resizeImageLinearInterpolation(srcImageRange(in), 
-                    destImageRange(out));
-                break;
-              default:
-                // resize the image, using a bi-cubic spline algorithms
-                resizeImageSplineInterpolation(srcImageRange(in), 
-                    destImageRange(out));
-            }
-            
-            // write the image to the file given as second argument
-            // the file type will be determined from the file name's extension
-            exportImage(srcImageRange(out), vigra::ImageExportInfo(argv[2]));
+            std::cerr << "Resize factor ? ";
+            std::cin >> sizefactor;
+        }
+
+        int method;
+        if(argc > 4)
+        {
+            method = atoi(argv[4]);
+        }
+        else
+        {
+            std::cerr << "Method (0: pixel repetition, 1: linear, 2-7: spline) ? ";
+            std::cin >> method;
+        }
+
+        // calculate new image size
+        Shape2 newSize((info.shape() - Shape2(1,1)) * sizefactor + Shape2(1,1));
+
+        if(info.isGrayscale())
+        {
+            if(!resizeImageFile<MultiArray<2, UInt8> >(info, newSize, method, argv[2]))
+                return 1;
+        }
+        else
+        {
+            if(!resizeImageFile<MultiArray<2, RGBValue<UInt8> > >(info, newSize, method, argv[2]))
+                return 1;
         }
     }
-    catch (vigra::StdException & e)
+    catch (std::exception & e)
     {
         // catch any errors that might have occurred and print their reason
         std::cout << e.what() << std::endl;
         return 1;
     }
-    
+
     return 0;
 }

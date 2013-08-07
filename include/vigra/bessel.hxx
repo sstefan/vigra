@@ -135,22 +135,22 @@ void bessjyn(int n, REAL x,int &nm, double *jn, double *yn)
 {
     double t1,t2,f,f1,f2,bj0,bj1,bjk,by0,by1,cu,s0,su,sv;
     double ec,bs,byk,p0,p1,q0,q1;
-    static double a[] = {
+    double a[] = {
         -0.7031250000000000e-1,
          0.1121520996093750,
         -0.5725014209747314,
          6.074042001273483};
-    static double b[] = {
+    double b[] = {
          0.7324218750000000e-1,
         -0.2271080017089844,
          1.727727502584457,
         -2.438052969955606e1};
-    static double a1[] = {
+    double a1[] = {
          0.1171875,
         -0.1441955566406250,
          0.6765925884246826,
         -6.883914268109947};
-    static double b1[] = {
+    double b1[] = {
        -0.1025390625,
         0.2775764465332031,
        -1.993531733751297,
@@ -258,7 +258,7 @@ void bessjyn(int n, REAL x,int &nm, double *jn, double *yn)
  
 } // namespace detail
 
-    /*! Bessel function of the first kind. 
+    /** \brief Bessel function of the first kind. 
 
         Computes the value of BesselJ of integer order <tt>n</tt> and argument <tt>x</tt>.
         Negative <tt>x</tt> are unsupported and will result in a <tt>std::domain_error</tt>.
@@ -294,7 +294,7 @@ inline double besselJ(int n, double x)
 #endif
 }
 
-    /*! Bessel function of the second kind. 
+    /** \brief Bessel function of the second kind. 
 
         Computes the value of BesselY of integer order <tt>n</tt> and argument <tt>x</tt>.
         Negative <tt>x</tt> are unsupported and will result in a <tt>std::domain_error</tt>.

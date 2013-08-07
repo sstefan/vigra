@@ -1,6 +1,6 @@
 /************************************************************************/
 /*                                                                      */
-/*               Copyright 1998-2002 by Ullrich Koethe                  */
+/*            Copyright 2011-2012 by Ullrich Koethe                     */
 /*                                                                      */
 /*    This file is part of the VIGRA computer vision library.           */
 /*    The VIGRA Website is                                              */
@@ -29,71 +29,41 @@
 /*    HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,      */
 /*    WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING      */
 /*    FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR     */
-/*    OTHER DEALINGS IN THE SOFTWARE.                                   */                
+/*    OTHER DEALINGS IN THE SOFTWARE.                                   */
 /*                                                                      */
 /************************************************************************/
- 
 
-#include <iostream>
-#include "vigra/stdimage.hxx"
-#include "vigra/distancetransform.hxx"
-#include "vigra/impex.hxx"
+#define PY_ARRAY_UNIQUE_SYMBOL vigranumpyanalysis_PyArray_API
+#define NO_IMPORT_ARRAY
 
-using namespace vigra; 
+#include "pythonaccumulator.hxx"
 
+namespace python = boost::python;
 
-int main(int argc, char ** argv)
+namespace vigra
 {
-    if(argc != 3)
-    {
-        std::cout << "Usage: " << argv[0] << " infile outfile" << std::endl;
-        std::cout << "(supported formats: " << vigra::impexListFormats() << ")" << std::endl;
-        
-        return 1;
-    }
+
+void defineMultibandRegionAccumulators()
+{
+    using namespace python;
+    using namespace vigra::acc;
+
+    docstring_options doc_options(true, true, false);
     
-    try
-    {
-        // read image given as first argument
-        // file type is determined automatically
-        vigra::ImageImportInfo info(argv[1]);
-        
-        if(info.isGrayscale())
-        {
-            // create a gray scale image of appropriate size
-            vigra::BImage in(info.width(), info.height());
-            vigra::FImage out(info.width(), info.height());
-            
-            // import the image just read
-            importImage(info, destImage(in));
-            
-            distanceTransform(srcImageRange(in),
-                           destImage(out),
-                           255, 2);
-                           
-                           // write the image to the file given as second argument
-            // the file type will be determined from the file name's extension
-            exportImage(srcImageRange(out), vigra::ImageExportInfo(argv[2]));
-        }
-        else
-        {
-            // create a RGB image of appropriate size
-            vigra::BRGBImage in(info.width(), info.height());
-            
-            // import the image just read
-            importImage(info, destImage(in));
-            
-            // write the image to the file given as second argument
-            // the file type will be determined from the file name's extension
-            exportImage(srcImageRange(in), vigra::ImageExportInfo(argv[2]));
-        }
-    }
-    catch (vigra::StdException & e)
-    {
-        // catch any errors that might have occured and print their reason
-        std::cout << e.what() << std::endl;
-        return 1;
-    }
+    typedef Select<Count, Mean, Variance, Skewness, Kurtosis, Covariance, 
+                   Principal<Variance>, Principal<Skewness>, Principal<Kurtosis>,
+                   Principal<CoordinateSystem>,
+                   Minimum, Maximum, Principal<Minimum>, Principal<Maximum>,
+                   Select<RegionCenter, RegionRadii, RegionAxes,
+                          Coord<Minimum>, Coord<Maximum>, Principal<Coord<Skewness> >, Principal<Coord<Kurtosis> > >,
+                   DataArg<1>, LabelArg<2>
+                   > VectorRegionAccumulators;
+
+    definePythonAccumulatorArrayMultiband<3, float, VectorRegionAccumulators>();
+    definePythonAccumulatorArrayMultiband<4, float, VectorRegionAccumulators>();
     
-    return 0;
+    definePythonAccumulatorArray<2, TinyVector<float, 3>, VectorRegionAccumulators>();
+    definePythonAccumulatorArray<3, TinyVector<float, 3>, VectorRegionAccumulators>();
 }
+
+} // namespace vigra

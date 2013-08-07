@@ -8,15 +8,15 @@ if(HDF5_INCLUDE_DIR)
     FIND_LIBRARY(HDF5_CORE_LIBRARY NAMES hdf5dll hdf5  )
     FIND_LIBRARY(HDF5_HL_LIBRARY NAMES hdf5_hldll hdf5_hl  )
 
-    # in new HDF5 versions, this is automatically defined
-    # (but I don't know the first version were this is true)
-    # IF(WIN32 AND HDF5_CORE_LIBRARY MATCHES "dll.lib$")
-        # SET(HDF5_CFLAGS "-D_HDF5USEDLL_")
-        # SET(HDF5_CPPFLAGS "-D_HDF5USEDLL_ -DHDF5CPP_USEDLL")
-    # ELSE()
-        # SET(HDF5_CFLAGS)
-        # SET(HDF5_CPPFLAGS)
-    # ENDIF()
+    # FIXME: as of version 1.8.9 and 1.8.10-patch1 (but NOT 1.8.10), these flags are
+    #        already set correctly => remove or set conditionally according to version
+    IF(WIN32 AND HDF5_CORE_LIBRARY MATCHES "dll.lib$")
+        SET(HDF5_CFLAGS "-D_HDF5USEDLL_")
+        SET(HDF5_CPPFLAGS "-D_HDF5USEDLL_ -DHDF5CPP_USEDLL")
+    ELSE()
+        SET(HDF5_CFLAGS)
+        SET(HDF5_CPPFLAGS)
+    ENDIF()
 
     SET(HDF5_VERSION_MAJOR 1)
     SET(HDF5_VERSION_MINOR 8)
@@ -41,7 +41,7 @@ if(HDF5_INCLUDE_DIR)
                CMAKE_FLAGS "${HDF5_TRY_COMPILE_INCLUDE_DIR}") 
 
     if(HDF5_USES_ZLIB)
-        FIND_LIBRARY(HDF5_Z_LIBRARY NAMES zlib1 z )
+        FIND_LIBRARY(HDF5_Z_LIBRARY NAMES zlib1 zlib z )
         set(HDF5_ZLIB_OK ${HDF5_Z_LIBRARY})
     else()
         set(HDF5_ZLIB_OK TRUE)

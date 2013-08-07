@@ -50,7 +50,7 @@
 #include "numerictraits.hxx"
 #include "algorithm.hxx"
 
-/*! \page MathConstants Mathematical Constants
+/** \page MathConstants Mathematical Constants
 
     <TT>M_PI, M_SQRT2 etc.</TT>
 
@@ -106,6 +106,10 @@
 #    define M_SQRT2  1.41421356237309504880
 #endif
 
+#ifndef M_E
+#    define M_E      2.71828182845904523536
+#endif
+
 #ifndef M_EULER_GAMMA
 #    define M_EULER_GAMMA  0.5772156649015329
 #endif
@@ -144,7 +148,7 @@ VIGRA_DEFINE_UNSIGNED_ABS(unsigned long long)
 #undef VIGRA_DEFINE_UNSIGNED_ABS
 
 #define VIGRA_DEFINE_MISSING_ABS(T) \
-    inline T abs(T t) { return t < 0 ? -t : t; }
+    inline T abs(T t) { return t < 0 ? static_cast<T>(-t) : t; }
 
 VIGRA_DEFINE_MISSING_ABS(signed char)
 VIGRA_DEFINE_MISSING_ABS(signed short)
@@ -177,7 +181,21 @@ VIGRA_DEFINE_SCALAR_DOT(long double)
 
 #undef VIGRA_DEFINE_SCALAR_DOT
 
-    /*! The rounding function.
+using std::pow;
+
+// support 'double' exponents for all floating point versions of pow()
+
+inline float pow(float v, double e)
+{
+    return std::pow(v, (float)e);
+}
+
+inline long double pow(long double v, double e)
+{
+    return std::pow(v, (long double)e);
+}
+
+    /** \brief The rounding function.
 
         Defined for all floating point types. Rounds towards the nearest integer 
         such that <tt>abs(round(t)) == round(abs(t))</tt> for all <tt>t</tt>.
@@ -211,7 +229,7 @@ inline long double round(long double t)
 }
 
 
-    /*! Round and cast to integer.
+    /** \brief Round and cast to integer.
 
         Rounds to the nearest integer like round(), but casts the result to 
         <tt>int</tt> (this will be faster and is usually needed anyway).
@@ -226,7 +244,7 @@ inline int roundi(double t)
                 : int(t - 0.5);
 }
 
-    /*! Round up to the nearest power of 2.
+    /** \brief Round up to the nearest power of 2.
 
         Efficient algorithm for finding the smallest power of 2 which is not smaller than \a x
         (function clp2() from Henry Warren: "Hacker's Delight", Addison-Wesley, 2003,
@@ -249,7 +267,7 @@ inline UInt32 ceilPower2(UInt32 x)
     return x + 1;
 } 
     
-    /*! Round down to the nearest power of 2.
+    /** \brief Round down to the nearest power of 2.
 
         Efficient algorithm for finding the largest power of 2 which is not greater than \a x
         (function flp2() from Henry Warren: "Hacker's Delight", Addison-Wesley, 2003,
@@ -271,9 +289,8 @@ inline UInt32 floorPower2(UInt32 x)
 namespace detail {
 
 template <class T>
-class IntLog2
+struct IntLog2
 {
-  public:
     static Int32 table[64];
 };
 
@@ -287,7 +304,7 @@ Int32 IntLog2<T>::table[64] = {
 
 } // namespace detail
 
-    /*! Compute the base-2 logarithm of an integer.
+    /** \brief Compute the base-2 logarithm of an integer.
 
         Returns the position of the left-most 1-bit in the given number \a x, or
         -1 if \a x == 0. That is,
@@ -315,7 +332,7 @@ inline Int32 log2i(UInt32 x)
     return detail::IntLog2<Int32>::table[x >> 26];
 }
 
-    /*! The square function.
+    /** \brief The square function.
 
         <tt>sq(x) = x*x</tt> is needed so often that it makes sense to define it as a function.
 
@@ -363,7 +380,7 @@ struct power_static<V, 0>
 
 } // namespace detail
 
-    /*! Exponentiation to a positive integer power by squaring.
+    /** \brief Exponentiation to a positive integer power by squaring.
 
         <b>\#include</b> \<vigra/mathutil.hxx\><br>
         Namespace: vigra
@@ -378,9 +395,8 @@ inline V power(const V & x)
 namespace detail {
 
 template <class T>
-class IntSquareRoot
+struct IntSquareRoot
 {
-  public:
     static UInt32 sqq_table[];
     static UInt32 exec(UInt32 v);
 };
@@ -474,7 +490,7 @@ UInt32 IntSquareRoot<T>::exec(UInt32 x)
 
 using VIGRA_CSTD::sqrt;
 
-    /*! Signed integer square root.
+    /** \brief Signed integer square root.
     
         Useful for fast fixed-point computations.
 
@@ -488,7 +504,7 @@ inline Int32 sqrti(Int32 v)
     return (Int32)detail::IntSquareRoot<UInt32>::exec((UInt32)v);
 }
 
-    /*! Unsigned integer square root.
+    /** \brief Unsigned integer square root.
 
         Useful for fast fixed-point computations.
 
@@ -501,7 +517,7 @@ inline UInt32 sqrti(UInt32 v)
 }
 
 #ifdef VIGRA_NO_HYPOT
-    /*! Compute the Euclidean distance (length of the hypotenuse of a right-angled triangle).
+    /** \brief Compute the Euclidean distance (length of the hypotenuse of a right-angled triangle).
 
         The  hypot()  function  returns  the  sqrt(a*a  +  b*b).
         It is implemented in a way that minimizes round-off error.
@@ -526,7 +542,7 @@ using ::hypot;
 
 #endif
 
-    /*! The sign function.
+    /** \brief The sign function.
 
         Returns 1, 0, or -1 depending on the sign of \a t, but with the same type as \a t.
 
@@ -543,7 +559,7 @@ inline T sign(T t)
                     : NumericTraits<T>::zero();
 }
 
-    /*! The integer sign function.
+    /** \brief The integer sign function.
 
         Returns 1, 0, or -1 depending on the sign of \a t, converted to int.
 
@@ -560,7 +576,7 @@ inline int signi(T t)
                     : 0;
 }
 
-    /*! The binary sign function.
+    /** \brief The binary sign function.
 
         Transfers the sign of \a t2 to \a t1.
 
@@ -577,13 +593,13 @@ inline T1 sign(T1 t1, T2 t2)
 
 
 #ifdef DOXYGEN // only for documentation
-    /*! Check if an integer is even.
+    /** \brief Check if an integer is even.
 
         Defined for all integral types.
     */
 bool even(int t);
 
-    /*! Check if an integer is odd.
+    /** \brief Check if an integer is odd.
 
         Defined for all integral types.
     */
@@ -637,18 +653,20 @@ squaredNorm(std::complex<T> const & t)
 }
 
 #ifdef DOXYGEN // only for documentation
-    /*! The squared norm of a numerical object.
+    /** \brief The squared norm of a numerical object.
 
-        For scalar types: equals <tt>vigra::sq(t)</tt><br>.
-        For vectorial types: equals <tt>vigra::dot(t, t)</tt><br>.
-        For complex types: equals <tt>vigra::sq(t.real()) + vigra::sq(t.imag())</tt><br>.
-        For matrix types: results in the squared Frobenius norm (sum of squares of the matrix elements).
+        <ul>
+        <li>For scalar types: equals <tt>vigra::sq(t)</tt>.
+        <li>For vectorial types (including TinyVector): equals <tt>vigra::dot(t, t)</tt>.
+        <li>For complex number types: equals <tt>vigra::sq(t.real()) + vigra::sq(t.imag())</tt>.
+        <li>For array and matrix types: results in the squared Frobenius norm (sum of squares of the matrix elements).
+        </ul>
     */
 NormTraits<T>::SquaredNormType squaredNorm(T const & t);
 
 #endif
 
-    /*! The norm of a numerical object.
+    /** \brief The norm of a numerical object.
 
         For scalar types: implemented as <tt>abs(t)</tt><br>
         otherwise: implemented as <tt>sqrt(squaredNorm(t))</tt>.
@@ -664,13 +682,13 @@ norm(T const & t)
     return sqrt(static_cast<typename SquareRootTraits<SNT>::SquareRootArgument>(squaredNorm(t)));
 }
 
-    /*! Compute the eigenvalues of a 2x2 real symmetric matrix.
-    
+    /** \brief Compute the eigenvalues of a 2x2 real symmetric matrix.
+      
         This uses the analytical eigenvalue formula 
         \f[
            \lambda_{1,2} = \frac{1}{2}\left(a_{00} + a_{11} \pm \sqrt{(a_{00} - a_{11})^2 + 4 a_{01}^2}\right)
         \f]
-
+      
         <b>\#include</b> \<vigra/mathutil.hxx\><br>
         Namespace: vigra
     */
@@ -684,14 +702,13 @@ void symmetric2x2Eigenvalues(T a00, T a01, T a11, T * r0, T * r1)
         std::swap(*r0, *r1);
 }
 
-    /*! Compute the eigenvalues of a 3x3 real symmetric matrix.
-    
+    /** \brief Compute the eigenvalues of a 3x3 real symmetric matrix.
+        
         This uses a numerically stable version of the analytical eigenvalue formula according to
         <p>
         David Eberly: <a href="http://www.geometrictools.com/Documentation/EigenSymmetric3x3.pdf">
         <em>"Eigensystems for 3 × 3 Symmetric Matrices (Revisited)"</em></a>, Geometric Tools Documentation, 2006
-
-
+        
         <b>\#include</b> \<vigra/mathutil.hxx\><br>
         Namespace: vigra
     */
@@ -699,7 +716,7 @@ template <class T>
 void symmetric3x3Eigenvalues(T a00, T a01, T a02, T a11, T a12, T a22,
                              T * r0, T * r1, T * r2)
 {
-    static double inv3 = 1.0 / 3.0, root3 = std::sqrt(3.0);
+    double inv3 = 1.0 / 3.0, root3 = std::sqrt(3.0);
     
     double c0 = a00*a11*a22 + 2.0*a01*a02*a12 - a00*a12*a12 - a11*a02*a02 - a22*a01*a01;
     double c1 = a00*a11 - a01*a01 + a00*a22 - a02*a02 + a11*a22 - a12*a12;
@@ -781,14 +798,14 @@ T ellipticRF(T x, T y, T z)
 
 } // namespace detail
 
-    /*! The incomplete elliptic integral of the first kind.
+    /** \brief The incomplete elliptic integral of the first kind.
+    
+        This function computes
 
-        Computes
-        
         \f[
-            \mbox{F}(x, k) = \int_0^x \frac{1}{\sqrt{1 - k^2 \sin(t)^2}} dt
+             \mbox{F}(x, k) = \int_0^x \frac{1}{\sqrt{1 - k^2 \sin(t)^2}} dt
         \f]
-        
+  
         according to the algorithm given in Press et al. "Numerical Recipes". 
 
         Note: In some libraries (e.g. Mathematica), the second parameter of the elliptic integral
@@ -804,20 +821,20 @@ inline double ellipticIntegralF(double x, double k)
     return s*detail::ellipticRF(c2, 1.0 - sq(k*s), 1.0);
 }
 
-    /*! The incomplete elliptic integral of the second kind.
-
-        Computes
-        
+    /** \brief The incomplete elliptic integral of the second kind.
+      
+        This function computes
+      
         \f[
             \mbox{E}(x, k) = \int_0^x \sqrt{1 - k^2 \sin(t)^2} dt
         \f]
-        
+      
         according to the algorithm given in Press et al. "Numerical Recipes". The
         complete elliptic integral of the second kind is simply <tt>ellipticIntegralE(M_PI/2, k)</TT>.
-        
+      
         Note: In some libraries (e.g. Mathematica), the second parameter of the elliptic integral
         functions must be k^2 rather than k. Check the documentation when results disagree!
-
+      
         <b>\#include</b> \<vigra/mathutil.hxx\><br>
         Namespace: vigra
     */
@@ -829,7 +846,7 @@ inline double ellipticIntegralE(double x, double k)
     return s*(detail::ellipticRF(c2, 1.0-k, 1.0) - k/3.0*detail::ellipticRD(c2, 1.0-k, 1.0));
 }
 
-#if _MSC_VER
+#ifdef _MSC_VER
 
 namespace detail {
 
@@ -849,7 +866,7 @@ double erfImpl(T x)
 
 } // namespace detail 
 
-    /*! The error function.
+    /** \brief The error function.
 
         If <tt>erf()</tt> is not provided in the C standard math library (as it should according to the
         new C99 standard ?), VIGRA implements <tt>erf()</tt> as an approximation of the error 
@@ -975,7 +992,7 @@ std::pair<double, double> noncentralChi2CDF(unsigned int degreesOfFreedom, T non
 
 } // namespace detail
 
-    /*! Chi square distribution. 
+    /** \brief Chi square distribution. 
 
         Computes the density of a chi square distribution with \a degreesOfFreedom 
         and tolerance \a accuracy at the given argument \a arg
@@ -989,7 +1006,7 @@ inline double chi2(unsigned int degreesOfFreedom, double arg, double accuracy = 
     return detail::noncentralChi2CDF(degreesOfFreedom, 0.0, arg, accuracy).first;
 }
 
-    /*! Cumulative chi square distribution. 
+    /** \brief Cumulative chi square distribution. 
 
         Computes the cumulative density of a chi square distribution with \a degreesOfFreedom 
         and tolerance \a accuracy at the given argument \a arg, i.e. the probability that
@@ -1004,7 +1021,7 @@ inline double chi2CDF(unsigned int degreesOfFreedom, double arg, double accuracy
     return detail::noncentralChi2CDF(degreesOfFreedom, 0.0, arg, accuracy).second;
 }
 
-    /*! Non-central chi square distribution. 
+    /** \brief Non-central chi square distribution. 
 
         Computes the density of a non-central chi square distribution with \a degreesOfFreedom, 
         noncentrality parameter \a noncentrality and tolerance \a accuracy at the given argument 
@@ -1021,7 +1038,7 @@ inline double noncentralChi2(unsigned int degreesOfFreedom,
     return detail::noncentralChi2CDF(degreesOfFreedom, noncentrality, arg, accuracy).first;
 }
 
-    /*! Cumulative non-central chi square distribution. 
+    /** \brief Cumulative non-central chi square distribution. 
 
         Computes the cumulative density of a chi square distribution with \a degreesOfFreedom, 
         noncentrality parameter \a noncentrality and tolerance \a accuracy at the given argument 
@@ -1039,7 +1056,7 @@ inline double noncentralChi2CDF(unsigned int degreesOfFreedom,
     return detail::noncentralChi2CDF(degreesOfFreedom, noncentrality, arg, accuracy).second;
 }
 
-    /*! Cumulative non-central chi square distribution (approximate). 
+    /** \brief Cumulative non-central chi square distribution (approximate). 
 
         Computes approximate values of the cumulative density of a chi square distribution with \a degreesOfFreedom, 
         and noncentrality parameter \a noncentrality at the given argument 
@@ -1073,7 +1090,7 @@ T facLM(T l, T m)
 
 } // namespace detail
 
-    /*! Associated Legendre polynomial. 
+    /** \brief Associated Legendre polynomial. 
 
         Computes the value of the associated Legendre polynomial of order <tt>l, m</tt> 
         for argument <tt>x</tt>. <tt>x</tt> must be in the range <tt>[-1.0, 1.0]</tt>, 
@@ -1122,7 +1139,7 @@ REAL legendre(unsigned int l, int m, REAL x)
     return other;
 }
 
-    /*! Legendre polynomial. 
+    /** \brief \brief Legendre polynomial. 
 
         Computes the value of the Legendre polynomial of order <tt>l</tt> for argument <tt>x</tt>.
         <tt>x</tt> must be in the range <tt>[-1.0, 1.0]</tt>, otherwise an exception is thrown.
@@ -1136,7 +1153,7 @@ REAL legendre(unsigned int l, REAL x)
     return legendre(l, 0, x);
 }
 
-    /*! sin(pi*x). 
+    /** \brief sin(pi*x). 
 
         Essentially calls <tt>std::sin(M_PI*x)</tt> but uses a more accurate implementation
         to make sure that <tt>sin_pi(1.0) == 0.0</tt> (which does not hold for
@@ -1175,7 +1192,7 @@ REAL sin_pi(REAL x)
               : rem;
 }
 
-    /*! cos(pi*x). 
+    /** \brief cos(pi*x). 
 
         Essentially calls <tt>std::cos(M_PI*x)</tt> but uses a more accurate implementation
         to make sure that <tt>cos_pi(1.0) == -1.0</tt> and <tt>cos_pi(0.5) == 0.0</tt>.
@@ -1192,37 +1209,143 @@ REAL cos_pi(REAL x)
 namespace detail {
 
 template <class REAL>
-REAL gammaImpl(REAL x)
+struct GammaImpl
+{
+    static REAL gamma(REAL x);
+    static REAL loggamma(REAL x);
+    
+    static double g[];
+    static double a[];
+    static double t[];
+    static double u[];
+    static double v[];
+    static double s[];
+    static double r[];
+    static double w[];
+};
+
+template <class REAL>
+double GammaImpl<REAL>::g[] = {
+    1.0,
+    0.5772156649015329,
+   -0.6558780715202538,
+   -0.420026350340952e-1,
+    0.1665386113822915,
+   -0.421977345555443e-1,
+   -0.9621971527877e-2,
+    0.7218943246663e-2,
+   -0.11651675918591e-2,
+   -0.2152416741149e-3,
+    0.1280502823882e-3,
+   -0.201348547807e-4,
+   -0.12504934821e-5,
+    0.1133027232e-5,
+   -0.2056338417e-6,
+    0.6116095e-8,
+    0.50020075e-8,
+   -0.11812746e-8,
+    0.1043427e-9,
+    0.77823e-11,
+   -0.36968e-11,
+    0.51e-12,
+   -0.206e-13,
+   -0.54e-14,
+    0.14e-14
+};
+
+template <class REAL>
+double GammaImpl<REAL>::a[] = {
+    7.72156649015328655494e-02,
+    3.22467033424113591611e-01,
+    6.73523010531292681824e-02,
+    2.05808084325167332806e-02,
+    7.38555086081402883957e-03,
+    2.89051383673415629091e-03,
+    1.19270763183362067845e-03,
+    5.10069792153511336608e-04,
+    2.20862790713908385557e-04,
+    1.08011567247583939954e-04,
+    2.52144565451257326939e-05,
+    4.48640949618915160150e-05 
+};
+
+template <class REAL>
+double GammaImpl<REAL>::t[] = {
+    4.83836122723810047042e-01,
+    -1.47587722994593911752e-01,
+    6.46249402391333854778e-02,
+    -3.27885410759859649565e-02,
+    1.79706750811820387126e-02,
+    -1.03142241298341437450e-02,
+    6.10053870246291332635e-03,
+    -3.68452016781138256760e-03,
+    2.25964780900612472250e-03,
+    -1.40346469989232843813e-03,
+    8.81081882437654011382e-04,
+    -5.38595305356740546715e-04,
+    3.15632070903625950361e-04,
+    -3.12754168375120860518e-04,
+    3.35529192635519073543e-04
+};
+
+template <class REAL>
+double GammaImpl<REAL>::u[] = {
+    -7.72156649015328655494e-02,
+    6.32827064025093366517e-01,
+    1.45492250137234768737e+00,
+    9.77717527963372745603e-01,
+    2.28963728064692451092e-01,
+    1.33810918536787660377e-02
+};
+
+template <class REAL>
+double GammaImpl<REAL>::v[] = {
+    0.0,
+    2.45597793713041134822e+00,
+    2.12848976379893395361e+00,
+    7.69285150456672783825e-01,
+    1.04222645593369134254e-01,
+    3.21709242282423911810e-03
+};
+
+template <class REAL>
+double GammaImpl<REAL>::s[] = {
+    -7.72156649015328655494e-02,
+    2.14982415960608852501e-01,
+    3.25778796408930981787e-01,
+    1.46350472652464452805e-01,
+    2.66422703033638609560e-02,
+    1.84028451407337715652e-03,
+    3.19475326584100867617e-05
+};
+
+template <class REAL>
+double GammaImpl<REAL>::r[] = {
+    0.0,
+    1.39200533467621045958e+00,
+    7.21935547567138069525e-01,
+    1.71933865632803078993e-01,
+    1.86459191715652901344e-02,
+    7.77942496381893596434e-04,
+    7.32668430744625636189e-06
+};
+
+template <class REAL>
+double GammaImpl<REAL>::w[] = {
+    4.18938533204672725052e-01,
+    8.33333333333329678849e-02,
+    -2.77777777728775536470e-03,
+    7.93650558643019558500e-04,
+    -5.95187557450339963135e-04,
+    8.36339918996282139126e-04,
+    -1.63092934096575273989e-03
+};
+
+template <class REAL>
+REAL GammaImpl<REAL>::gamma(REAL x)
 {
     int i, k, m, ix = (int)x;
     double ga = 0.0, gr = 0.0, r = 0.0, z = 0.0;
-
-    static double g[] = {
-        1.0,
-        0.5772156649015329,
-       -0.6558780715202538,
-       -0.420026350340952e-1,
-        0.1665386113822915,
-       -0.421977345555443e-1,
-       -0.9621971527877e-2,
-        0.7218943246663e-2,
-       -0.11651675918591e-2,
-       -0.2152416741149e-3,
-        0.1280502823882e-3,
-       -0.201348547807e-4,
-       -0.12504934821e-5,
-        0.1133027232e-5,
-       -0.2056338417e-6,
-        0.6116095e-8,
-        0.50020075e-8,
-       -0.11812746e-8,
-        0.1043427e-9,
-        0.77823e-11,
-       -0.36968e-11,
-        0.51e-12,
-       -0.206e-13,
-       -0.54e-14,
-        0.14e-14};
 
     vigra_precondition(x <= 171.0,
         "gamma(): argument cannot exceed 171.0.");
@@ -1292,7 +1415,7 @@ REAL gammaImpl(REAL x)
  *
  */
 template <class REAL>
-REAL loggammaImpl(REAL x)
+REAL GammaImpl<REAL>::loggamma(REAL x)
 {
     vigra_precondition(x > 0.0,
         "loggamma(): argument must be positive.");
@@ -1312,48 +1435,9 @@ REAL loggammaImpl(REAL x)
     }
     else if (x < 2.0)
     {
-        static const double a[] =  { 7.72156649015328655494e-02,
-                               3.22467033424113591611e-01,
-                               6.73523010531292681824e-02,
-                               2.05808084325167332806e-02,
-                               7.38555086081402883957e-03,
-                               2.89051383673415629091e-03,
-                               1.19270763183362067845e-03,
-                               5.10069792153511336608e-04,
-                               2.20862790713908385557e-04,
-                               1.08011567247583939954e-04,
-                               2.52144565451257326939e-05,
-                               4.48640949618915160150e-05 };
-        static const double t[] = { 4.83836122723810047042e-01,
-                              -1.47587722994593911752e-01,
-                               6.46249402391333854778e-02,
-                              -3.27885410759859649565e-02,
-                               1.79706750811820387126e-02,
-                              -1.03142241298341437450e-02,
-                               6.10053870246291332635e-03,
-                              -3.68452016781138256760e-03,
-                               2.25964780900612472250e-03,
-                              -1.40346469989232843813e-03,
-                               8.81081882437654011382e-04,
-                              -5.38595305356740546715e-04,
-                               3.15632070903625950361e-04,
-                              -3.12754168375120860518e-04,
-                               3.35529192635519073543e-04 };
-        static const double u[] = { -7.72156649015328655494e-02,
-                               6.32827064025093366517e-01,
-                               1.45492250137234768737e+00,
-                               9.77717527963372745603e-01,
-                               2.28963728064692451092e-01,
-                               1.33810918536787660377e-02 };
-        static const double v[] = { 0.0,
-                               2.45597793713041134822e+00,
-                               2.12848976379893395361e+00,
-                               7.69285150456672783825e-01,
-                               1.04222645593369134254e-01,
-                               3.21709242282423911810e-03 };
-        static const double tc  =  1.46163214496836224576e+00;
-        static const double tf  = -1.21486290535849611461e-01;
-        static const double tt  = -3.63867699703950536541e-18;
+        const double tc  =  1.46163214496836224576e+00;
+        const double tf  = -1.21486290535849611461e-01;
+        const double tt  = -3.63867699703950536541e-18;
         if (x <= 0.9)
         {
             res = -std::log(x);
@@ -1419,20 +1503,6 @@ REAL loggammaImpl(REAL x)
     }
     else if(x < 8.0)
     {
-        static const double s[] = { -7.72156649015328655494e-02,
-                               2.14982415960608852501e-01,
-                               3.25778796408930981787e-01,
-                               1.46350472652464452805e-01,
-                               2.66422703033638609560e-02,
-                               1.84028451407337715652e-03,
-                               3.19475326584100867617e-05 };
-        static const double r[] = { 0.0,
-                               1.39200533467621045958e+00,
-                               7.21935547567138069525e-01,
-                               1.71933865632803078993e-01,
-                               1.86459191715652901344e-02,
-                               7.77942496381893596434e-04,
-                               7.32668430744625636189e-06 };
         double i = std::floor(x);
         double y = x-i;
         double p = y*(s[0]+y*(s[1]+y*(s[2]+y*(s[3]+y*(s[4]+y*(s[5]+y*s[6]))))));
@@ -1448,13 +1518,6 @@ REAL loggammaImpl(REAL x)
     }
     else if (x < 2.8823037615171174e+17)
     {
-        static const double w[] = { 4.18938533204672725052e-01,
-                               8.33333333333329678849e-02,
-                              -2.77777777728775536470e-03,
-                               7.93650558643019558500e-04,
-                              -5.95187557450339963135e-04,
-                               8.36339918996282139126e-04,
-                              -1.63092934096575273989e-03 };
         double t = std::log(x);
         double z = 1.0/x;
         double y = z*z;
@@ -1472,7 +1535,7 @@ REAL loggammaImpl(REAL x)
 
 } // namespace detail
 
-    /*! The gamma function.
+    /** \brief The gamma function.
 
         This function implements the algorithm from<br>
         Zhang and Jin: "Computation of Special Functions", John Wiley and Sons, 1996.
@@ -1485,10 +1548,10 @@ REAL loggammaImpl(REAL x)
     */
 inline double gamma(double x)
 {
-    return detail::gammaImpl(x);
+    return detail::GammaImpl<double>::gamma(x);
 }
 
-    /*! The natural logarithm of the gamma function.
+    /** \brief The natural logarithm of the gamma function.
 
         This function is based on a free implementation by Sun Microsystems, Inc., see
         <a href="http://www.sourceware.org/cgi-bin/cvsweb.cgi/~checkout~/src/newlib/libm/mathfp/er_lgamma.c?rev=1.6&content-type=text/plain&cvsroot=src">sourceware.org</a> archive. It can be removed once all compilers support the new C99
@@ -1501,7 +1564,7 @@ inline double gamma(double x)
     */
 inline double loggamma(double x)
 {
-    return detail::loggammaImpl(x);
+    return detail::GammaImpl<double>::loggamma(x);
 }
 
 
@@ -1522,7 +1585,7 @@ FPT safeFloatDivision( FPT f1, FPT f2 )
 
 } // namespace detail
     
-    /*! Tolerance based floating-point comparison.
+    /** \brief Tolerance based floating-point comparison.
 
         Check whether two floating point numbers are equal within the given tolerance.
         This is useful because floating point numbers that should be equal in theory are

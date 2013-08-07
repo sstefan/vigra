@@ -135,15 +135,20 @@ class ImageExportInfo
   public:
         /** Construct ImageExportInfo object.
 
-            The image will be stored under the given filename.
+            The image will be stored under the given \a filename.
             The file type will be guessed from the extension unless overridden
             by \ref setFileType(). Recognized extensions: '.bmp', '.exr', '.gif',
             '.jpeg', '.jpg', '.p7', '.png', '.pbm', '.pgm', '.pnm', '.ppm', '.ras',
             '.tif', '.tiff', '.xv', '.hdr'.
+            
             EXR support requires libopenexr, JPEG support requires libjpeg,
             PNG support requires libpng and TIFF support requires libtiff.
+            
+            If the data is exported to TIFF, the \a mode may be "a", in which case
+            the exported image is appended to the existing file, resulting in a 
+            multi-page TIFF image.
          **/
-    VIGRA_EXPORT ImageExportInfo( const char *, const char * = "w" );
+    VIGRA_EXPORT ImageExportInfo( const char * filename, const char * mode = "w" );
     VIGRA_EXPORT ~ImageExportInfo();
 
         /** Set image file name.
@@ -168,27 +173,27 @@ class ImageExportInfo
             from the file name's extension. Recognized file types:
 
             <DL>
-            <DT>"BMP"<DD> Microsoft Windows bitmap image file.
-            <DT>"EXR"<DD> OpenEXR high dynamic range image format.
+            <DT><b>BMP:</b><DD> Microsoft Windows bitmap image file.
+            <DT><b>EXR:</b><DD> OpenEXR high dynamic range image format.
             (only available if libopenexr is installed)
-            <DT>"GIF"<DD> CompuServe graphics interchange format; 8-bit color.
-            <DT>"HDR"<DD> Radiance RGBE high dynamic range image format.
-            <DT>"JPEG"<DD> Joint Photographic Experts Group JFIF format;
+            <DT><b>GIF:</b><DD> CompuServe graphics interchange format; 8-bit color.
+            <DT><b>HDR:</b><DD> Radiance RGBE high dynamic range image format.
+            <DT><b>JPEG:</b><DD> Joint Photographic Experts Group JFIF format;
             compressed 24-bit color (only available if libjpeg is installed).
-            <DT>"PNG"<DD> Portable Network Graphic
+            <DT><b>PNG:</b><DD> Portable Network Graphic
             (only available if libpng is installed).
-            <DT>"PBM"<DD> Portable bitmap format (black and white).
-            <DT>"PGM"<DD> Portable graymap format (gray scale).
-            <DT>"PNM"<DD> Portable anymap.
-            <DT>"PPM"<DD> Portable pixmap format (color).
-            <DT>"SUN"<DD> SUN Rasterfile.
-            <DT>"TIFF"<DD> Tagged Image File Format.
+            <DT><b>PBM:</b><DD> Portable bitmap format (black and white).
+            <DT><b>PGM:</b><DD> Portable graymap format (gray scale).
+            <DT><b>PNM:</b><DD> Portable anymap.
+            <DT><b>PPM:</b><DD> Portable pixmap format (color).
+            <DT><b>SUN:</b><DD> SUN Rasterfile.
+            <DT><b>TIFF:</b><DD> Tagged Image File Format.
             (only available if libtiff is installed.)
-            <DT>"VIFF"<DD> Khoros Visualization image file.
+            <DT><b>VIFF:</b><DD> Khoros Visualization image file.
             </DL>
 
             With the exception of TIFF, VIFF, PNG, and PNM all file types store
-            1 byte (gray scale and mapped RGB) or 3 bytes (RGB) per
+            only 1 byte (gray scale and mapped RGB) or 3 bytes (RGB) per
             pixel.
 
             PNG can store UInt8 and UInt16 values, and supports 1 and 3 channel
@@ -222,31 +227,31 @@ class ImageExportInfo
             the compression type. Valid arguments:
 
             <DL>
-            <DT>"NONE"<DD> (recognized by EXR and TIFF): do not compress (many other formats don't
+            <DT><b>NONE:</b><DD> (recognized by EXR and TIFF): do not compress (many other formats don't
                            compress either, but it is not an option for them).
-            <DT>"JPEG"<DD> (recognized by JPEG and TIFF): use JPEG compression.
+            <DT><b>JPEG:</b><DD> (recognized by JPEG and TIFF): use JPEG compression.
                            You can also specify a compression quality parameter by
                            passing "JPEG QUALITY=N", where "N" must be an integer between 1 and 100
                            (e.g. "JPEG QUALITY=70").
-            <DT>"JPEG-ARITH"<DD> (recognized by new versions of JPEG): use arithmetic coding as a back-end
+            <DT><b>JPEG-ARITH:</b><DD> (recognized by new versions of JPEG): use arithmetic coding as a back-end
                            after JPEG compression (by default, the back-end is Huffman coding).
                            You can also specify a compression quality parameter by
                            passing "JPEG-ARITH QUALITY=N", where "N" must be an integer between 1 and 100
                            (e.g. "JPEG-ARITH QUALITY=70").
-            <DT>"RLE", "RunLength"<DD> (recognized by EXR and TIFF): use run-length encoding. (BMP also
+            <DT><b>RLE, RunLength:</b><DD> (recognized by EXR and TIFF): use run-length encoding. (BMP also
                           uses run-length encoding, but there it is not an option).
-            <DT>"PACKBITS"<DD> (recognized by TIFF): use packbits encoding (a variant of RLE).
-            <DT>"DEFLATE"<DD> (recognized by TIFF): use deflate encoding, as defined in zlib (PNG also
+            <DT><b>PACKBITS:</b><DD> (recognized by TIFF): use packbits encoding (a variant of RLE).
+            <DT><b>DEFLATE:</b><DD> (recognized by TIFF): use deflate encoding, as defined in zlib (PNG also
                            uses deflate, but there it is not an option).
-            <DT>"LZW"<DD> (recognized by TIFF): use Lempel-Ziv-Welch encoding.
-            <DT>"ZIP"<DD> (recognized by EXR): use zip-style encoding.
-            <DT>"PIZ"<DD> (recognized by EXR): use wavelet encoding.
-            <DT>"PXR24"<DD> (recognized by EXR): reduce to 24-bit, then use zip-style encoding.
-            <DT>"B44", "B44A"<DD> (recognized by EXR): see OpenEXR documentation.
-            <DT>"ASCII"<DD> (recognized by PNM): store pixels as ASCII (human readable numbers).
-            <DT>"RAW"<DD> (recognized by PNM): store pixels as uncompressed binary data.
-            <DT>"BILEVEL"<DD> (recognized by PNM): store as one bit per pixel.
-            <DT>"1" ... "100"<DD> deprecated (equivalent to <tt>setCompression("JPEG QUALITY=number")</tt>
+            <DT><b>LZW:</b><DD> (recognized by TIFF): use Lempel-Ziv-Welch encoding.
+            <DT><b>ZIP:</b><DD> (recognized by EXR): use zip-style encoding.
+            <DT><b>PIZ:</b><DD> (recognized by EXR): use wavelet encoding.
+            <DT><b>PXR24:</b><DD> (recognized by EXR): reduce to 24-bit, then use zip-style encoding.
+            <DT><b>B44, B44A:</b><DD> (recognized by EXR): see OpenEXR documentation.
+            <DT><b>ASCII:</b><DD> (recognized by PNM): store pixels as ASCII (human readable numbers).
+            <DT><b>RAW:</b><DD> (recognized by PNM): store pixels as uncompressed binary data.
+            <DT><b>BILEVEL:</b><DD> (recognized by PNM): store as one bit per pixel.
+            <DT><b>1 ... 100:</b><DD> deprecated (equivalent to <tt>setCompression("JPEG QUALITY=number")</tt>
                              where the number denotes the desired quality).
             </DL>
 
@@ -259,13 +264,13 @@ class ImageExportInfo
 
         /** Set the pixel type of the image file. Possible values are:
             <DL>
-            <DT>"UINT8"<DD> 8-bit unsigned integer (unsigned char)
-            <DT>"INT16"<DD> 16-bit signed integer (short)
-            <DT>"UINT16"<DD> 16-bit unsigned integer (unsigned short)
-            <DT>"INT32"<DD> 32-bit signed integer (long)
-            <DT>"UINT32"<DD> 32-bit unsigned integer (unsigned long)
-            <DT>"FLOAT"<DD> 32-bit floating point (float)
-            <DT>"DOUBLE"<DD> 64-bit floating point (double)
+            <DT><b>UINT8:</b><DD> 8-bit unsigned integer (unsigned char)
+            <DT><b>INT16:</b><DD> 16-bit signed integer (short)
+            <DT><b>UINT16:</b><DD> 16-bit unsigned integer (unsigned short)
+            <DT><b>INT32:</b><DD> 32-bit signed integer (long)
+            <DT><b>UINT32:</b><DD> 32-bit unsigned integer (unsigned long)
+            <DT><b>FLOAT:</b><DD> 32-bit floating point (float)
+            <DT><b>DOUBLE:</b><DD> 64-bit floating point (double)
             </DL>
 
             <b>Usage:</b>
@@ -285,11 +290,11 @@ class ImageExportInfo
 
         /** Get the pixel type of the image. Possible values are:
             <DL>
-            <DT>"UINT8"<DD> 8-bit unsigned integer (unsigned char)
-            <DT>"INT16"<DD> 16-bit signed integer (short)
-            <DT>"INT32"<DD> 32-bit signed integer (long)
-            <DT>"FLOAT"<DD> 32-bit floating point (float)
-            <DT>"DOUBLE"<DD> 64-bit floating point (double)
+            <DT><b>UINT8:</b><DD> 8-bit unsigned integer (unsigned char)
+            <DT><b>INT16:</b><DD> 16-bit signed integer (short)
+            <DT><b>INT32:</b><DD> 32-bit signed integer (long)
+            <DT><b>FLOAT:</b><DD> 32-bit floating point (float)
+            <DT><b>DOUBLE:</b><DD> 64-bit floating point (double)
             </DL>
          **/
     VIGRA_EXPORT const char * getPixelType() const;
@@ -365,7 +370,7 @@ class ImageExportInfo
 };
 
 // return an encoder for a given ImageExportInfo object
-VIGRA_EXPORT std::auto_ptr<Encoder> encoder( const ImageExportInfo & info );
+VIGRA_EXPORT VIGRA_UNIQUE_PTR<Encoder> encoder( const ImageExportInfo & info );
 
 /********************************************************/
 /*                                                      */
@@ -393,26 +398,29 @@ class ImageImportInfo
             file (magic number). Recognized file types:
 
             <DL>
-            <DT>"BMP"<DD> Microsoft Windows bitmap image file.
-            <DT>"EXR"<DD> OpenEXR high dynamic range image format.
+            <DT><b>BMP:</b><DD> Microsoft Windows bitmap image file.
+            <DT><b>EXR:</b><DD> OpenEXR high dynamic range image format.
             (only available if libopenexr is installed)
-            <DT>"GIF"<DD> CompuServe graphics interchange format; 8-bit color.
-            <DT>"HDR"<DD> Radiance RGBE high dynamic range image format.
-            <DT>"JPEG"<DD> Joint Photographic Experts Group JFIF format;
+            <DT><b>GIF:</b><DD> CompuServe graphics interchange format; 8-bit color.
+            <DT><b>HDR:</b><DD> Radiance RGBE high dynamic range image format.
+            <DT><b>JPEG:</b><DD> Joint Photographic Experts Group JFIF format;
             compressed 24-bit color (only available if libjpeg is installed).
-            <DT>"PNG"<DD> Portable Network Graphic
+            <DT><b>PNG:</b><DD> Portable Network Graphic
             (only available if libpng is installed).
-            <DT>"PBM"<DD> Portable bitmap format (black and white).
-            <DT>"PGM"<DD> Portable graymap format (gray scale).
-            <DT>"PNM"<DD> Portable anymap.
-            <DT>"PPM"<DD> Portable pixmap format (color).
-            <DT>"SUN"<DD> SUN Rasterfile.
-            <DT>"TIFF"<DD> Tagged Image File Format.
+            <DT><b>PBM:</b><DD> Portable bitmap format (black and white).
+            <DT><b>PGM:</b><DD> Portable graymap format (gray scale).
+            <DT><b>PNM:</b><DD> Portable anymap.
+            <DT><b>PPM:</b><DD> Portable pixmap format (color).
+            <DT><b>SUN:</b><DD> SUN Rasterfile.
+            <DT><b>TIFF:</b><DD> Tagged Image File Format.
             (only available if libtiff is installed.)
-            <DT>"VIFF"<DD> Khoros Visualization image file.
+            <DT><b>VIFF:</b><DD> Khoros Visualization image file.
             </DL>
+            
+            The parameter \a page can be used in conjunction with multi-page TIFF 
+            files in order to specify the desired page (i.e. image) in the file.
          **/
-    VIGRA_EXPORT ImageImportInfo( const char *, unsigned int = 0 );
+    VIGRA_EXPORT ImageImportInfo( const char * filename, unsigned int page = 0 );
     VIGRA_EXPORT ~ImageImportInfo();
 
     VIGRA_EXPORT const char * getFileName() const;
@@ -474,13 +482,13 @@ class ImageImportInfo
 
             Possible values are:
             <DL>
-            <DT>"UINT8"<DD> 8-bit unsigned integer (unsigned char)
-            <DT>"INT16"<DD> 16-bit signed integer (short)
-            <DT>"UINT16"<DD> 16-bit unsigned integer (unsigned short)
-            <DT>"INT32"<DD> 32-bit signed integer (long)
-            <DT>"UINT32"<DD> 32-bit unsigned integer (unsigned long)
-            <DT>"FLOAT"<DD> 32-bit floating point (float)
-            <DT>"DOUBLE"<DD> 64-bit floating point (double)
+            <DT><b>UINT8:</b><DD> 8-bit unsigned integer (unsigned char)
+            <DT><b>INT16:</b><DD> 16-bit signed integer (short)
+            <DT><b>UINT16:</b><DD> 16-bit unsigned integer (unsigned short)
+            <DT><b>INT32:</b><DD> 32-bit signed integer (long)
+            <DT><b>UINT32:</b><DD> 32-bit unsigned integer (unsigned long)
+            <DT><b>FLOAT:</b><DD> 32-bit floating point (float)
+            <DT><b>DOUBLE:</b><DD> 64-bit floating point (double)
             </DL>
          **/
     VIGRA_EXPORT const char * getPixelType() const;
@@ -493,13 +501,13 @@ class ImageImportInfo
 
             Possible values are:
             <DL>
-            <DT>UINT8<DD> 8-bit unsigned integer (unsigned char)
-            <DT>INT16<DD> 16-bit signed integer (short)
-            <DT>UINT16<DD> 16-bit unsigned integer (unsigned short)
-            <DT>INT32<DD> 32-bit signed integer (long)
-            <DT>UINT32<DD> 32-bit unsigned integer (unsigned long)
-            <DT>FLOAT<DD> 32-bit floating point (float)
-            <DT>DOUBLE<DD> 64-bit floating point (double)
+            <DT><b>UINT8:</b><DD> 8-bit unsigned integer (unsigned char)
+            <DT><b>INT16:</b><DD> 16-bit signed integer (short)
+            <DT><b>UINT16:</b><DD> 16-bit unsigned integer (unsigned short)
+            <DT><b>INT32:</b><DD> 32-bit signed integer (long)
+            <DT><b>UINT32:</b><DD> 32-bit unsigned integer (unsigned long)
+            <DT><b>FLOAT:</b><DD> 32-bit floating point (float)
+            <DT><b>DOUBLE:</b><DD> 64-bit floating point (double)
             </DL>
          **/
     VIGRA_EXPORT PixelType pixelType() const;
@@ -551,7 +559,7 @@ class ImageImportInfo
 };
 
 // return a decoder for a given ImageImportInfo object
-VIGRA_EXPORT std::auto_ptr<Decoder> decoder( const ImageImportInfo & info );
+VIGRA_EXPORT VIGRA_UNIQUE_PTR<Decoder> decoder( const ImageImportInfo & info );
 
 //@}
 

@@ -34,7 +34,7 @@
 /************************************************************************/
 
 #include <iostream>
-#include "unittest.hxx"
+#include "vigra/unittest.hxx"
 #include "vigra/stdimage.hxx"
 #include "vigra/basicimageview.hxx"
 #include "vigra/imageiterator.hxx"
@@ -525,8 +525,7 @@ struct ImageContainerTests
 
         Diff2D newsize(50, 50);
         threeLennas.resizeImages(newsize);
-        for (ImageArray<FImage>::iterator it= threeLennas.begin();
-             it!= threeLennas.end(); it++)
+        for (ImageArray<FImage>::iterator it= threeLennas.begin(); it!= threeLennas.end(); it++)
             shouldEqual((*it).size(), newsize);
     }
 

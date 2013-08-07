@@ -1,11 +1,10 @@
 /************************************************************************/
 /*                                                                      */
-/*                 Copyright 2004 by Ullrich Koethe                     */
+/*                 Copyright 2013 by Ullrich Koethe                     */
 /*       Cognitive Systems Group, University of Hamburg, Germany        */
 /*                                                                      */
 /*    This file is part of the VIGRA computer vision library.           */
-/*    The VIGRA Website is                                              */
-/*        http://kogs-www.informatik.uni-hamburg.de/~koethe/vigra/      */
+/*        http://hci.iwr.uni-heidelberg.de/vigra/                       */
 /*    Please direct questions, bug reports, and contributions to        */
 /*        ullrich.koethe@iwr.uni-heidelberg.de    or                    */
 /*        vigra@informatik.uni-hamburg.de                               */
@@ -35,7 +34,7 @@
 /************************************************************************/
 
 #define VIGRA_CHECK_BOUNDS
-#include "unittest.hxx"
+#include "vigra/unittest.hxx"
 #include <cstdlib>
 #include <algorithm>
 #include <functional>
@@ -308,9 +307,10 @@ void SamplerTests::testSamplingWithoutReplacementChi2()
     // Use fixed random numbers so that the sampling is reproducible.
     int nsamples = 120000;
     int nclasses = 120;
+    MersenneTwister randomGenerator;
     Sampler<> sampler( 5, 
                 SamplerOptions().withoutReplacement().sampleSize(5),
-                MersenneTwister());
+                &randomGenerator);
     std::map<unsigned int, int> wierdmap;
     std::map<unsigned int , int>::iterator iter;
     for(int ii = 0; ii < 1000; ++ii)
@@ -367,9 +367,10 @@ void SamplerTests::testSamplingWithReplacementChi2()
            ratio = double(numOfSamples) / totalDataCount;
 
     {
+        MersenneTwister randomGenerator;
         Sampler<> sampler(totalDataCount, 
              SamplerOptions().withReplacement().sampleSize(numOfSamples),
-             MersenneTwister());
+             &randomGenerator);
 
         sampler.sample();
         for(int ii = 0; ii < numOfSamples; ++ii)
@@ -386,7 +387,7 @@ void SamplerTests::testSamplingWithReplacementChi2()
 
     /* when sampling k times without replacement
     the probability p of a sample not being picked is ((k-1)/k)^k
-    The distribution of the number of samples not being choosen is a
+    The distribution of the number of samples not being chosen is a
     binomial distribution with n = k and p = ((k-1)/k)^k.
     The expectation value of a binomial distribution is n*p ==>
     The percentage of samples not used is (n*p)/k = p

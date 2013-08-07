@@ -39,6 +39,7 @@
 
 #include <cmath>
 #include "stdimage.hxx"
+#include "multi_shape.hxx"
 
 namespace vigra {
 
@@ -102,10 +103,10 @@ internalDistanceTransform(SrcImageIterator src_upperleft,
     FImage::Iterator xdx = xdy;
     FImage::Iterator ydx = ydy;
     
-    static const Diff2D left(-1, 0);
-    static const Diff2D right(1, 0);
-    static const Diff2D top(0, -1);
-    static const Diff2D bottom(0, 1);
+    const Diff2D left(-1, 0);
+    const Diff2D right(1, 0);
+    const Diff2D top(0, -1);
+    const Diff2D bottom(0, 1);
         
     int x,y;
     if(sa(sx) != background)    // first pixel
@@ -303,39 +304,64 @@ internalDistanceTransform(SrcImageIterator src_upperleft,
     
     <b> Declarations:</b>
     
-    pass arguments explicitly:
+    pass 2D array views:
     \code
     namespace vigra {
-        template <class SrcImageIterator, class SrcAccessor,
-                           class DestImageIterator, class DestAccessor,
-                           class ValueType>
-        void distanceTransform(SrcImageIterator src_upperleft, 
-                        SrcImageIterator src_lowerright, SrcAccessor sa,
-                        DestImageIterator dest_upperleft, DestAccessor da,
-                        ValueType background, int norm)
+        template <class T1, class S1,
+                  class T2, class S2,
+                  class ValueType>
+        void
+        distanceTransform(MultiArrayView<2, T1, S1> const & src,
+                          MultiArrayView<2, T2, S2> dest,
+                          ValueType background, int norm);
     }
     \endcode
     
-    
+    \deprecatedAPI{distanceTransform}
+    pass \ref ImageIterators and \ref DataAccessors :
+    \code
+    namespace vigra {
+        template <class SrcImageIterator, class SrcAccessor,
+                  class DestImageIterator, class DestAccessor,
+                  class ValueType>
+        void distanceTransform(SrcImageIterator src_upperleft, 
+                               SrcImageIterator src_lowerright, SrcAccessor sa,
+                               DestImageIterator dest_upperleft, DestAccessor da,
+                               ValueType background, int norm);
+    }
+    \endcode
     use argument objects in conjunction with \ref ArgumentObjectFactories :
     \code
     namespace vigra {
         template <class SrcImageIterator, class SrcAccessor,
-                           class DestImageIterator, class DestAccessor,
-                           class ValueType>
-        void distanceTransform(
-            triple<SrcImageIterator, SrcImageIterator, SrcAccessor> src,
-            pair<DestImageIterator, DestAccessor> dest,
-            ValueType background, int norm)
+                  class DestImageIterator, class DestAccessor,
+                  class ValueType>
+        void distanceTransform(triple<SrcImageIterator, SrcImageIterator, SrcAccessor> src,
+                               pair<DestImageIterator, DestAccessor> dest,
+                               ValueType background, int norm);
     }
     \endcode
+    \deprecatedEnd
     
     <b> Usage:</b>
     
     <b>\#include</b> \<vigra/distancetransform.hxx\><br>
     Namespace: vigra
-    
-    
+
+    \code
+    MultiArray<2, unsigned char> src(w,h), edges(w,h);
+    MultiArray<2, float>         distance(w, h);
+    ...
+
+    // detect edges in src image (edges will be marked 1, background 0)
+    differenceOfExponentialEdgeImage(src, edges, 0.8, 4.0);
+     
+    // find distance of all pixels from nearest edge
+    distanceTransform(edges, distance, 0,                   2);
+    //                                 ^ background label   ^ norm (Euclidean)
+    \endcode
+
+    \deprecatedUsage{distanceTransform}
     \code
     
     vigra::BImage src(w,h), edges(w,h);
@@ -354,9 +380,7 @@ internalDistanceTransform(SrcImageIterator src_upperleft,
                              0,                   2);
     //                       ^ background label   ^ norm (Euclidean)
     \endcode
-
     <b> Required Interface:</b>
-    
     \code
     
     SrcImageIterator src_upperleft, src_lowerright;
@@ -373,6 +397,7 @@ internalDistanceTransform(SrcImageIterator src_upperleft,
     da.set(distance, dest_upperleft);
  
     \endcode
+    \deprecatedEnd
 */
 doxygen_overloaded_function(template <...> void distanceTransform)
 
@@ -406,16 +431,29 @@ distanceTransform(SrcImageIterator src_upperleft,
 }
 
 template <class SrcImageIterator, class SrcAccessor,
-                   class DestImageIterator, class DestAccessor,
-                   class ValueType>
+          class DestImageIterator, class DestAccessor,
+          class ValueType>
 inline void
-distanceTransform(
-    triple<SrcImageIterator, SrcImageIterator, SrcAccessor> src,
-    pair<DestImageIterator, DestAccessor> dest,
-    ValueType background, int norm)
+distanceTransform(triple<SrcImageIterator, SrcImageIterator, SrcAccessor> src,
+                  pair<DestImageIterator, DestAccessor> dest,
+                  ValueType background, int norm)
 {
     distanceTransform(src.first, src.second, src.third,
                       dest.first, dest.second, background, norm);
+}
+
+template <class T1, class S1,
+          class T2, class S2,
+          class ValueType>
+inline void
+distanceTransform(MultiArrayView<2, T1, S1> const & src,
+                  MultiArrayView<2, T2, S2> dest,
+                  ValueType background, int norm)
+{
+    vigra_precondition(src.shape() == dest.shape(),
+        "distanceTransform(): shape mismatch between input and output.");
+    distanceTransform(srcImageRange(src),
+                      destImage(dest), background, norm);
 }
 
 //@}

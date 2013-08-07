@@ -294,7 +294,7 @@ readVolume(const char * filename, python::object import_type, std::string order 
 }
 
 template <class T>
-void writeVolume(NumpyArray<3, Multiband<T> > const & volume,
+void writeVolume(NumpyArray<3, T > const & volume,
                     const char * filename_base, 
                     const char * filename_ext, 
                     python::object export_type,  
@@ -420,12 +420,16 @@ void defineImpexFunctions()
         "\n"
         "For details see the help for :func:`readImage`.\n");
         
-    multidef("writeVolume", pywriteVolume<Int8, UInt64, Int64, UInt16, Int16, UInt32, Int32, double, float, UInt8>(), 
+    multidef("writeVolume", pywriteVolume<Singleband<Int8>, Singleband<UInt64>, Singleband<Int64>, Singleband<UInt16>, 
+                                          Singleband<Int16>, Singleband<UInt32>, Singleband<Int32>, Singleband<double>, 
+                                          Singleband<float>, Singleband<UInt8>, TinyVector<float, 3>, TinyVector<UInt8, 3> >(), 
        (arg("volume"), arg("filename_base"), arg("filename_ext"), arg("dtype") = "", arg("compression") = ""),
-       "Wrtie a volume as a sequence of images::\n\n"
+       "Write a volume as a sequence of images::\n\n"
        "   writeVolume(volume, filename_base, filename_ext, dtype = '', compression = '')\n\n"
        "The resulting image sequence will be enumerated in the form::\n\n"
        "    filename_base+[0-9]+filename_ext\n\n"
+       "Write a volume as a multi-page tiff (filename_ext must be an empty string)::\n\n"
+       "   writeVolume(volume, filename, '', dtype = '', compression = '')\n\n"
        "Parameters 'dtype' and 'compression' will be handled as in :func:`writeImage`.\n\n");
     
     def("readImage", &readImage, 
@@ -445,11 +449,11 @@ void defineImpexFunctions()
         "\n"
         "Individual images of sequential formats such as multi-image TIFF can be \n"
         "accessed via index. The number of images in a file can be checked with the \n"
-        "function :func:`numberImages`(filename).\n"
+        "function :func:`numberImages`.\n"
         "\n"
         "The order parameter determines the axis ordering of the resulting array\n"
-        "(allowed values: 'C', 'F', 'V'). When order == '' (the default), " 
-        "vigra.VigraArray.defaultOrder is used.\n"
+        "(allowed values: 'C', 'F', 'V'). When order == '' (the default), \n" 
+        "'vigra.VigraArray.defaultOrder' is used.\n"
         "\n"
         "Supported file formats are listed by the function :func:`listFormats`.\n"
         "When filename does not refer to a recognized image file format, an\n"
@@ -499,8 +503,10 @@ void defineImpexFunctions()
         " mode:\n"
         "     support for sequential file formats such as multi-image TIFF. \n"
         "     Possible values:\n\n"
-        "     'w' create a new file (default)\n"
-        "     'a' append an image to a file or creates a new one if the file does \n"
+        "     'w':\n"
+        "        create a new file (default)\n"
+        "     'a':\n"
+        "        append an image to a file or create a new one if the file does \n"
         "        not exist (only supported by TIFF)\n\n"
         "Supported file formats are listed by the function vigra.impexListFormats().\n"
         "The different file formats support the following pixel types:\n\n"
@@ -511,14 +517,15 @@ void defineImpexFunctions()
         "       (pixel type: UINT8 as gray and RGB).\n"
         "   JPEG:\n"
         "       Joint Photographic Experts Group JFIF format; compressed 24-bit color\n"
-        "       (pixel types: UINT8 as gray and RGB). (only available if libjpeg is installed)\n"
+        "       (pixel types: UINT8 as gray and RGB). Only available if libjpeg is\n"
+        "       installed.\n"
         "   PNG:\n"
         "       Portable Network Graphic (pixel types: UINT8 and UINT16 with\n"
         "       up to 4 channels). (only available if libpng is installed)\n"
         "   PBM:\n"
         "       Portable bitmap format (black and white).\n"
         "   PGM:\n"
-        "       Portable graymap format (pixel types: UINT8, INT16, INT32 as gray scale)).\n"
+        "       Portable graymap format (pixel types: UINT8, INT16, INT32 as gray scale).\n"
         "   PNM:\n"
         "       Portable anymap (pixel types: UINT8, INT16, INT32, gray and RGB)\n"
         "   PPM:\n"
@@ -527,7 +534,7 @@ void defineImpexFunctions()
         "       SUN Rasterfile (pixel types: UINT8 as gray and RGB).\n"
         "   TIFF:\n"
         "       Tagged Image File Format (pixel types: UINT8, INT16, INT32, FLOAT, DOUBLE\n"
-        "       with up to 4 channels). (only available if libtiff is installed.)\n"
+        "       with up to 4 channels). Only available if libtiff is installed.\n"
         "   VIFF:\n"
         "       Khoros Visualization image file (pixel types: UINT8, INT16\n"
         "       INT32, FLOAT, DOUBLE with arbitrary many channels).\n\n");

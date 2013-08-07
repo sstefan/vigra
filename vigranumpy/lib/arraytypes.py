@@ -42,7 +42,8 @@ import vigranumpycore
 from vigranumpycore import AxisType, AxisInfo, AxisTags
 
 def _preserve_doc(f):
-    f.__doc__ = eval('numpy.ndarray.%s.__doc__' % f.__name__) + \
+    npy_doc = eval('numpy.ndarray.%s.__doc__' % f.__name__)
+    f.__doc__ =  ("" if npy_doc is None else npy_doc) + \
                  ("" if f.__doc__ is None else "\n" + f.__doc__)
     return f
 
@@ -157,6 +158,13 @@ def _AxisTags_fromJSON(json_rep):
         tag_list.append(AxisInfo(**tags))
     return AxisTags(tag_list)
 
+def _AxisTags__reduce__(self):
+    '''
+        enable pickling of AxisTags
+    '''
+    return _AxisTags_fromJSON, (self.toJSON(),)
+
+AxisTags.__reduce__ = _AxisTags__reduce__
 AxisTags.fromJSON = staticmethod(_AxisTags_fromJSON)
 AxisTags.fromJSON.__doc__ = _AxisTags_fromJSON.__doc__
     
@@ -218,6 +226,23 @@ def _constructArrayFromArray(cls, obj, dtype, order, init, axistags):
             array.axistags = axistags
         elif hasattr(array, 'axistags'):
             del array.axistags
+    return array
+
+def _constructArrayFromPickle(_arraypickle, _permutation, _axistags):
+    reconstructionFunction = _arraypickle[0]
+    reconstructionArgs = _arraypickle[1]
+    array = reconstructionFunction(*reconstructionArgs)
+    array.__setstate__(_arraypickle[2])
+    array = array.transpose(_permutation)
+    array.axistags = AxisTags.fromJSON(_axistags)
+    return array
+    
+def _constructArrayFromZMQSocket(socket, flags=0, copy=True, track=False):
+    metadata = socket.recv_json(flags=flags)
+    axistags = AxisTags.fromJSON(socket.recv(flags=flags))
+    data = buffer(socket.recv(flags=flags, copy=copy, track=track))
+    array = numpy.frombuffer(data, dtype=metadata['dtype']).reshape(metadata['shape'])
+    array = taggedView(array.transpose(metadata['permutation']), axistags)
     return array
     
 ##################################################################
@@ -302,7 +327,7 @@ class VigraArray(numpy.ndarray):
             >>> vigra.VigraArray.defaultAxistags(3, order='C')
             y x c
             >>> vigra.VigraArray.defaultAxistags(2, noChannels=True)
-            x y z
+            x y
             >>> vigra.VigraArray.defaultAxistags(3, noChannels=True)
             x y z
             >>> vigra.VigraArray.defaultAxistags(4, noChannels=True)
@@ -454,7 +479,29 @@ class VigraArray(numpy.ndarray):
         except:
             pass
         return str(self.view(numpy.ndarray))
-    
+          
+    def __reduce__(self):
+        '''
+            Enable pickling of a VigraArray, including axistags. The stride ordering
+            will be preserved in the unpickled array. Note that user-defined attributes
+            will not be saved and restored.
+        '''
+        # since the stride ordering is not necessarily preserved by ndarray's pickling
+        # functions, we need to normalize stride ordering, and permute to the original 
+        # ordering upon reconstruction
+        pickled = numpy.ndarray.__reduce__(self.transposeToNumpyOrder())
+        return _constructArrayFromPickle, (pickled, self.permutationFromNumpyOrder(), self.axistags.toJSON())
+        
+    @staticmethod
+    def receiveSocket(socket, flags=0, copy=True, track=False):
+        '''
+        Reconstruct an array that has been transferred via a ZMQ socket by a call to 
+        VigraArray.sendSocket(). This only works when the 'zmq' module is available.
+        The meaning of the arguments is described in zmq.Socket.recv().
+        '''
+        return _constructArrayFromZMQSocket(socket, flags, copy, track)
+
+            
     ###############################################################
     #                                                             #
     #                     array I/O and display                   #
@@ -495,6 +542,23 @@ class VigraArray(numpy.ndarray):
         import vigra.impex
 
         vigra.impex.writeHDF5(self, filenameOurGroup, pathInFile)
+
+    def sendSocket(self, socket, flags=0, copy=True, track=False):
+        '''
+        Send array and metadata over a ZMQ socket. Only works if the 'zmq' module is available.
+        The meaning of the arguments is described in zmq.Socket.send().
+        '''
+        import zmq
+        
+        transposed = self.transposeToNumpyOrder().view(numpy.ndarray)
+        metadata = dict(
+            dtype = str(transposed.dtype),
+            shape = transposed.shape,
+            permutation = self.permutationFromNumpyOrder()
+        )
+        socket.send_json(metadata, flags|zmq.SNDMORE)
+        socket.send(self.axistags.toJSON(), flags|zmq.SNDMORE)
+        return socket.send(transposed, flags, copy=copy, track=track)
 
     def imshow(self):
         '''
@@ -789,7 +853,7 @@ class VigraArray(numpy.ndarray):
         
             array[:, index, ...]
             
-        but you don not need to know the position of the axis when you use the 
+        but you do not need to know the position of the axis when you use the 
         axis key (according to axistags). For example, to get the green channel
         of an RGBImage, you write::
         
@@ -1027,11 +1091,36 @@ class VigraArray(numpy.ndarray):
             res = numpy.ndarray.__getitem__(self, 
                      map(lambda x: None if isinstance(x, AxisInfo) else x, index))
         if res is not self and hasattr(res, 'axistags'):
-            if res.base is self:
+            if res.base is self or res.base is self.base:
                 res.axistags = res._transform_axistags(index)
             else:
                 res.axistags = res._empty_axistags(res.ndim)
         return res
+        
+    def subarray(self, p1, p2=None):
+        '''
+        Construct a subarray view from a pair of points. The first point denotes the start
+        of the subarray (inclusive), the second its end (exclusive). For example,
+        
+            a.subarray((1,2,3), (4,5,6))  # equivalent to a[1:4, 2:5, 3:6]
+        
+        The given points must have the same dimension, otherwise an IndexError is raised. 
+        If only one point is given, it refers to the subarray's end, and the start is set 
+        to the point (0, 0, ...) with appropriate dimension, for example
+        
+            a.subarray((4,5,6))           # equivalent to a[:4, :5, :6]
+        
+        The function transforms the given point pair into a tuple of slices and calls 
+        self.__getitem__() in it. If the points have lower dimension than the array, an 
+        Ellipsis ('...') is implicitly appended to the slicing, so that missing axes 
+        are left unaltered.
+        '''
+        if p2 is not None:
+            if len(p1) != len(p2):
+                raise IndexError('VigraArray.subarray(): points must have the same dimension.')
+            return self.__getitem__(tuple(map(lambda x,y: slice(x.__int__(), y.__int__()), p1, p2)))
+        else:
+            return self.__getitem__(tuple(map(lambda x: slice(x.__int__()), p1)))
     
     ###############################################################
     #                                                             #
@@ -1216,7 +1305,7 @@ class VigraArray(numpy.ndarray):
         '''
         if axistags is not None and len(shape) != len(axistags):
             raise RuntimeError("VigraArray.reshape(): size mismatch between shape and axistags.")
-        res = numpy.ndarray.reshape(self, shape, order)
+        res = numpy.ndarray.reshape(self, shape, order=order)
         if axistags is not None:
             res.axistags = copy.copy(axistags)
         else:
