@@ -2420,6 +2420,10 @@ void HDF5File::read_(std::string datasetName,
                     ? 1
                     : 0;
 
+    if ((dimshape.size() == 0)) {
+	dimshape.resize(1, 1); // workaround for scalar entries with dimension 0, assume dimension one with size 1
+    }
+
     vigra_precondition((N + offset ) == MultiArrayIndex(dimshape.size()), 
         "HDF5File::read(): Array dimension disagrees with dataset dimension.");
 
