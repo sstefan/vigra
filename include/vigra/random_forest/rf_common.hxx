@@ -712,7 +712,7 @@ public:
         PULL(row_count_, int);
         PULL(actual_mtry_,int);
         PULL(actual_msample_, int);
-        PULL(problem_type_, Problem_t);
+        PULL(problem_type_, (Problem_t)int);
         PULL(is_weighted_, int);
         PULL(used_, int);
         PULL(precision_, double);
