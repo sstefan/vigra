@@ -3026,7 +3026,7 @@ struct TPSTest
 	std::copy(resultMatrix2.begin(), resultMatrix2.end(), std::ostream_iterator<double>(std::cout, ","));
 	std::cout << std::endl;
 
-	if (1) { // for plotting
+	if (0) { // for plotting
 	    std::ofstream res("/tmp/res.txt");
 	    const int Npoints = 100;
 	    TPS::KnotMatrix newQueryPointMatrix2(C2(Npoints, 1));
@@ -3058,10 +3058,10 @@ struct TPSTest
 	valueMatrix(3,0) = 1.5;
 	valueMatrix(4,0) = 0.0;
 
-	const double relaxationValue = 100.0;
+	const double relaxationValue = 0.05;
 	TPS tps(knotMatrix, valueMatrix, relaxationValue);
 
-	if (1) { // for plotting
+	if (0) { // for plotting
 	    std::ofstream res("/tmp/resApprox.txt");
 	    const int Npoints = 100;
 	    TPS::KnotMatrix newQueryPointMatrix2(C2(Npoints, 1));
@@ -3084,7 +3084,7 @@ struct MathTestSuite
     {
         typedef vigra::Polynomial<double> P1;
         typedef vigra::StaticPolynomial<10, double> P2;
-	/*
+
         add( testCase((&PolynomialTest<0, P1>::testPolynomial)));
         add( testCase((&PolynomialTest<1, P1>::testPolynomial)));
         add( testCase((&PolynomialTest<2, P1>::testPolynomial)));
@@ -3186,7 +3186,7 @@ struct MathTestSuite
         add( testCase(&RandomTest::testRandomFunctors));
 
         add( testCase(&PolygonTest::testConvexHull));
-	*/
+
 	add (testCase(&TPSTest::testTPS1D));
 	add (testCase(&TPSTest::testTPS1DApprox));
     }

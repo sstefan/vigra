@@ -1465,6 +1465,7 @@ CatmullRomSpline<T>::operator()(argument_type x) const
 				// fill system matrix by columns
 				for (int i=0; i < Npoints; ++i) {
 				    EvalBasisForPoint(knots.template bind<0>(i), systemMatrix.template bind<1>(affineOffset + i));
+				    systemMatrix(affineOffset+i, affineOffset+i) += relaxation;
 				}
 				// copy the polynomial part of the system matrix (transpose)
 				systemMatrix.subarray(C2(affineOffset, 0), C2(tpsdim, affineOffset)).copy(
