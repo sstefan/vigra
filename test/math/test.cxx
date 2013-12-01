@@ -40,6 +40,7 @@
 
 #include <typeinfo>
 #include <iostream>
+#include <fstream> // REMOVEME!
 #include <iomanip>
 #include <algorithm>
 #include <sstream>
@@ -2970,6 +2971,111 @@ struct PolygonTest
 };
 
 
+struct TPSTest
+{
+    // typedef vigra::TinyVector<double, 2> Point;    
+    void testTPS1D()
+    {
+	std::cout << "Running TPS test:" << std::endl;
+	typedef vigra::RBF::ThinPlateSpline<1, 1, double> TPS;
+
+	typedef TPS::C2 C2;
+	TPS::KnotMatrix knotMatrix(C2(5, 1));
+	knotMatrix(0,0) = 0.0;
+	knotMatrix(1,0) = 1.0;
+	knotMatrix(2,0) = 1.5;
+	knotMatrix(3,0) = 2.0;
+	knotMatrix(4,0) = 3.0;
+	TPS::ValueMatrix valueMatrix(C2(5, 1));
+	valueMatrix(0,0) = 0.0;
+	valueMatrix(1,0) = 1.0;
+	valueMatrix(2,0) = -0.5;
+	valueMatrix(3,0) = 1.5;
+	valueMatrix(4,0) = 0.0;
+
+
+	TPS tps(knotMatrix, valueMatrix);
+
+	// query at original points to check interpolation condition:
+	TPS::ValueMatrix resultMatrix(C2(5, 1), -99.0);
+	bool res = tps(knotMatrix, resultMatrix);
+	should(res); // TPS: return code 'false' indicates failure.
+
+	std::cout << "resultMatrix: ";
+	std::copy(resultMatrix.begin(), resultMatrix.end(), std::ostream_iterator<double>(std::cout, ","));
+	std::cout << std::endl;
+	
+	shouldEqualSequenceTolerance(resultMatrix.begin(), resultMatrix.end(), valueMatrix.begin(), 1e-8);
+
+	// query at some intermediate points (and TODO check against reference values)
+	TPS::KnotMatrix newQueryPointMatrix(C2(4, 1));
+	newQueryPointMatrix(0,0) = 0.25;
+	newQueryPointMatrix(1,0) = 0.5;
+	newQueryPointMatrix(2,0) = 0.75;
+	newQueryPointMatrix(3,0) = 2.05;
+
+	TPS::ValueMatrix resultMatrix2 = tps(newQueryPointMatrix);
+
+	std::cout << "result tps 1d: ";
+	std::copy(resultMatrix2.begin(), resultMatrix2.end(), std::ostream_iterator<double>(std::cout, ","));
+	std::cout << std::endl;
+
+	tps(newQueryPointMatrix, resultMatrix2);
+
+	std::cout << "result tps 1d again: ";
+	std::copy(resultMatrix2.begin(), resultMatrix2.end(), std::ostream_iterator<double>(std::cout, ","));
+	std::cout << std::endl;
+
+	if (1) { // for plotting
+	    std::ofstream res("/tmp/res.txt");
+	    const int Npoints = 100;
+	    TPS::KnotMatrix newQueryPointMatrix2(C2(Npoints, 1));
+	    for (int i=0; i < Npoints; ++i) {
+		newQueryPointMatrix2(i,0) = -1.0 + 7.0*i/Npoints;
+	    }
+	    TPS::ValueMatrix resultMatrix3 = tps(newQueryPointMatrix2);
+	    for (int i=0; i < Npoints; ++i) 
+		res << newQueryPointMatrix2(i,0) << "\t" << resultMatrix3(i,0) << std::endl;
+	}	
+    }
+
+    void testTPS1DApprox()
+    {
+	std::cout << "Running TPS test:" << std::endl;
+	typedef vigra::RBF::ThinPlateSpline<1, 1, double> TPS;
+
+	typedef TPS::C2 C2;
+	TPS::KnotMatrix knotMatrix(C2(5, 1));
+	knotMatrix(0,0) = 0.0;
+	knotMatrix(1,0) = 1.0;
+	knotMatrix(2,0) = 1.5;
+	knotMatrix(3,0) = 2.0;
+	knotMatrix(4,0) = 3.0;
+	TPS::ValueMatrix valueMatrix(C2(5, 1));
+	valueMatrix(0,0) = 0.0;
+	valueMatrix(1,0) = 1.0;
+	valueMatrix(2,0) = -0.5;
+	valueMatrix(3,0) = 1.5;
+	valueMatrix(4,0) = 0.0;
+
+	const double relaxationValue = 100.0;
+	TPS tps(knotMatrix, valueMatrix, relaxationValue);
+
+	if (1) { // for plotting
+	    std::ofstream res("/tmp/resApprox.txt");
+	    const int Npoints = 100;
+	    TPS::KnotMatrix newQueryPointMatrix2(C2(Npoints, 1));
+	    for (int i=0; i < Npoints; ++i) {
+		newQueryPointMatrix2(i,0) = -1.0 + 7.0*i/Npoints;
+	    }
+	    TPS::ValueMatrix resultMatrix3 = tps(newQueryPointMatrix2);
+	    for (int i=0; i < Npoints; ++i) 
+		res << newQueryPointMatrix2(i,0) << "\t" << resultMatrix3(i,0) << std::endl;
+	}	
+    }
+};
+
+
 struct MathTestSuite
 : public vigra::test_suite
 {
@@ -2978,7 +3084,7 @@ struct MathTestSuite
     {
         typedef vigra::Polynomial<double> P1;
         typedef vigra::StaticPolynomial<10, double> P2;
-
+	/*
         add( testCase((&PolynomialTest<0, P1>::testPolynomial)));
         add( testCase((&PolynomialTest<1, P1>::testPolynomial)));
         add( testCase((&PolynomialTest<2, P1>::testPolynomial)));
@@ -3080,6 +3186,9 @@ struct MathTestSuite
         add( testCase(&RandomTest::testRandomFunctors));
 
         add( testCase(&PolygonTest::testConvexHull));
+	*/
+	add (testCase(&TPSTest::testTPS1D));
+	add (testCase(&TPSTest::testTPS1DApprox));
     }
 };
 

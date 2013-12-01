@@ -42,6 +42,9 @@
 #include "polynomial.hxx"
 #include "array_vector.hxx"
 #include "fixedpoint.hxx"
+#include "multi_array.hxx"
+#include "linear_solve.hxx"
+#include <stdexcept>
 
 namespace vigra {
 
@@ -1378,6 +1381,212 @@ CatmullRomSpline<T>::operator()(argument_type x) const
 
 
 //@}
+
+
+//@{
+
+	namespace RBF {
+
+		namespace Kernels {
+
+		    template<int DIM> 
+		    struct TPSKernel {
+		    };
+		    template<>
+		    struct TPSKernel<1> {
+			template<class VALUETYPE>
+			static VALUETYPE eval(const VALUETYPE &r) {
+			    return r * r * r;
+			}
+		    };
+#if 0
+		    template<>
+		    struct TPSKernel<2> {
+			template<class VALUETYPE>
+			static VALUETYPE operator()(const VALUETYPE &r) {
+				if(r > 0.0)
+					return r * r * log(r);
+				else
+					return 0.0;
+			}
+		    };
+		    template<>
+		    struct TPSKernel<3> {
+			template<class VALUETYPE>
+			static VALUETYPE operator()(const VALUETYPE &r) {
+			    return r;
+			}
+		    };
+#endif
+		} // namespace Kernels
+
+
+		//! Simple class to compute a thin-plate spline (TPS) mapping
+		// (approximation or interpolation, depending on @param relaxation)
+		template<int INPUTDIM, int OUTPUTDIM, class VALUETYPE>
+		class ThinPlateSpline {
+		public:
+			typedef MultiArray<2, VALUETYPE> Matrix;
+			typedef MultiArray<2, VALUETYPE> KnotMatrix;
+			typedef MultiArray<2, VALUETYPE> ValueMatrix;
+			typedef MultiArrayView<2, VALUETYPE> KnotMatrixView;
+			typedef MultiArrayView<2, VALUETYPE> ValueMatrixView;
+ 		        typedef MultiArray<1, VALUETYPE> Vector;
+ 		        typedef MultiArrayView<1, VALUETYPE, StridedArrayTag> VectorView;
+			typedef typename MultiArray<1, VALUETYPE>::difference_type C1;
+			typedef typename MultiArray<2, VALUETYPE>::difference_type C2;
+
+		    typedef Kernels::TPSKernel<INPUTDIM> Kernel;
+
+		    ThinPlateSpline(const KnotMatrixView &knots, const ValueMatrixView &targetValues, const VALUETYPE &relaxation = 0.0) : m_Knots(knots) 
+			{
+			    vigra_precondition(relaxation >= 0.0, "relaxation parameter must be nonnegative");
+
+				vigra_precondition(INPUTDIM >= 1, "unsupported input dimension");
+				vigra_precondition(INPUTDIM <= 3, "unsupported input dimension");
+				vigra_precondition(OUTPUTDIM >= 1, "unsupported output dimension");
+				vigra_precondition(OUTPUTDIM <= 3, "unsupported output dimension");
+				vigra_precondition(knots.shape(1) == INPUTDIM, "incompatible knot array dimension");
+				vigra_precondition(targetValues.shape(1) == OUTPUTDIM, "incompatible target value dimension");
+
+				const int Npoints = knots.shape(0);
+				std::cout << " knots shape: " << knots.shape(0) << "," << knots.shape(1) << std::endl;
+				std::cout << " targetValues shape: " << targetValues.shape(0) << "," << targetValues.shape(1) << std::endl;
+				vigra_precondition(targetValues.shape(0) == Npoints, "incompatible knot and target arrays");
+				const int affineOffset = 1 + INPUTDIM;
+				const int tpsdim = affineOffset + Npoints;
+				
+				Matrix systemMatrix(C2(tpsdim, tpsdim), 0.0);
+				// Setup the linear system:
+				// (0  P)   (cp)   (0)
+				// (Pt K) . (ck) = (b)
+
+				// affine components go first: constant, x1, ...; then follow the kernel pts.
+				// fill system matrix by columns
+				for (int i=0; i < Npoints; ++i) {
+				    EvalBasisForPoint(knots.template bind<0>(i), systemMatrix.template bind<1>(affineOffset + i));
+				}
+				// copy the polynomial part of the system matrix (transpose)
+				systemMatrix.subarray(C2(affineOffset, 0), C2(tpsdim, affineOffset)).copy(
+				    systemMatrix.subarray(C2(0, affineOffset), C2(affineOffset, tpsdim)).transpose()
+				    );
+				
+
+				Matrix rhs(C2(tpsdim, OUTPUTDIM), 0.0);
+				rhs.subarray(C2(affineOffset, 0), C2(tpsdim, OUTPUTDIM)).copy(targetValues);
+
+				{
+				    for (int i=0; i < tpsdim; ++i) {
+					for (int j=0; j < tpsdim; ++j) {
+					    std::cout << "\t" << systemMatrix(i, j);
+					}
+					std::cout << "   | "; 
+					for (int j=0; j < OUTPUTDIM; ++j) {
+					    std::cout << "\t" << rhs(i, j);
+					}
+					std::cout << std::endl;
+				    }
+				}
+
+
+				m_Coeffs.reshape(C2(tpsdim, OUTPUTDIM), 0.0);
+
+				// compute QR decomposition
+				const int rank = linalg::linearSolveQRReplace(systemMatrix, rhs, m_Coeffs);
+				if (rank != tpsdim) {
+				    std::cout << " QR solve return rank=" << rank << std::endl;
+				}
+				std::cout << "coeffs: ";
+				std::copy(m_Coeffs.begin(), m_Coeffs.end(), std::ostream_iterator<double>(std::cout, ","));
+				std::cout << std::endl;
+			}
+
+		        void EvalBasisForPoint(const VectorView& point, VectorView result) const {
+			    const int Npoints = m_Knots.shape(0);
+			    const int affineOffset = 1 + INPUTDIM;
+			    const int tpsdim = affineOffset + Npoints;
+			    
+			    vigra_precondition(point.shape(0) == INPUTDIM, "wrong input dimension");
+			    vigra_precondition(result.shape(0) == tpsdim, "wrong output dimension");
+			    
+			    result(0) = 1.0;
+			    for (int i = 0; i < INPUTDIM; ++i) {
+				result(1+i) = point(i);
+			    }
+			    // kernel evaluation
+			    for (int i = 0; i < Npoints; ++i) {
+				const VectorView kernelPoint = m_Knots.template bind<0>(i);
+				Vector diff(kernelPoint);
+				diff -= point;
+				const double norm = sqrt(dot(diff, diff));
+				result(affineOffset + i) = Kernel::eval(norm >= 0 ? norm : 0.0);
+			    }			    
+			}
+		    
+		    const int tpsDim() const {
+			    const int Npoints = m_Knots.shape(0);
+			    const int affineOffset = 1 + INPUTDIM;
+			    return affineOffset + Npoints;
+		    }
+
+			bool operator()(const KnotMatrixView &evalPositions, ValueMatrixView &resultValues) const {
+				const int Npoints = evalPositions.shape(0);
+				vigra_precondition(evalPositions.shape(1) == INPUTDIM, "eval position dimension mismatch");
+				vigra_precondition(resultValues.shape(0) == Npoints, "result array shape does not match");
+				vigra_precondition(resultValues.shape(1) == OUTPUTDIM, "result array shape does not match");
+
+				const int tpsdim = tpsDim();
+
+				Vector tempVector(C1(tpsdim), 0.0);
+
+				for (int i=0; i < Npoints; ++i) {
+				    EvalBasisForPoint(evalPositions.template bind<0>(i), tempVector);
+				    for (int j=0; j < OUTPUTDIM; ++j) {
+					resultValues(i,j) = dot(m_Coeffs.template bind<1>(j), tempVector);
+				    }
+				}
+				return true;
+			}
+
+			ValueMatrix operator()(const KnotMatrixView &evalPositions) const {
+				const int Npoints = evalPositions.shape(0);
+				ValueMatrix result(C2(Npoints, OUTPUTDIM), 0.0);
+				if (this->operator()(evalPositions, result))
+					return result;
+				else 
+				    throw std::runtime_error("TPS evaluation failed.");
+			}
+
+		protected:
+			void EvaluateTPSBasis() {}
+			void ComputeInterpolationMatrix() {}
+
+		protected:
+			Matrix m_Coeffs;
+			KnotMatrix m_Knots;
+		};
+
+
+	} // namespace RBF
+
+/*
+	template<class T1, class T2, int DIM>
+	double
+	RBF(const MultiArrayView<2, T1> & v1, const MultiArrayView<2, T2> & v2)
+	{
+		boost::numeric::ublas::vector<double> v(Dim);
+		for(unsigned int i(0); i < v.size(); ++i)
+		{
+			v(i) = v1[i] - v2[i];
+		}
+		return radial_basis(norm_2(v));
+	}
+*/
+
+
+//@}
+
+
 
 } // namespace vigra
 
