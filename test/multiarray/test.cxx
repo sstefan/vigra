@@ -449,7 +449,8 @@ public:
             std::string message(c.what());
             should(0 == expected.compare(message.substr(0,expected.size())));
         }
-	array.reset();
+	//	array = typename array3_type::view_type(); // assign empty view
+	array.resetView();
 	array = array3.subarray(Shape(0,0,0), Shape(10,1,1)); // possible after reset.
         MultiArrayView <3, scalar_type, array3_stride> subarray = array3.subarray(Shape(0,0,0), Shape(10,1,1));
 	should(subarray == array);
