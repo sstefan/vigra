@@ -2835,6 +2835,10 @@ public:
     {
         return vigra::detail::ResolveMultiband<T>::defaultStride(shape);
     }
+
+private:
+    /** Reset of view prohibited by redeclaring resetView member private */
+    using view_type::resetView; 
 };
 
 template <unsigned int N, class T, class A>
