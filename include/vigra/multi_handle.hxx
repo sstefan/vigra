@@ -252,18 +252,21 @@ public:
 
     CoupledHandle()
     : point_(),
+      offsetPoint_(),
       shape_(),
       scanOrderIndex_()
     {}
 
     CoupledHandle(value_type const & shape)
     : point_(),
+      offsetPoint_(),
       shape_(shape),
       scanOrderIndex_()
     {}
 
     CoupledHandle(typename MultiArrayShape<N+1>::type const & shape)
     : point_(),
+      offsetPoint_(),
       shape_(shape.begin()),
       scanOrderIndex_()
     {}
@@ -271,33 +274,39 @@ public:
     inline void incDim(int dim)
     {
         ++point_[dim];
+	++offsetPoint_[dim];
     }
 
     inline void decDim(int dim)
     {
         --point_[dim];
+	--offsetPoint_[dim];
     }
 
     inline void addDim(int dim, MultiArrayIndex d)
     {
         point_[dim] += d;
+	offsetPoint_[dim] += d;
     }
 
     inline void add(shape_type const & d)
     {
         point_ += d;
+	offsetPoint_ += d;
     }
 
     template<int DIMENSION>
     inline void increment()
     {
         ++point_[DIMENSION];
+        ++offsetPoint_[DIMENSION];
     }
 
     template<int DIMENSION>
     inline void decrement()
     {
         --point_[DIMENSION];
+        --offsetPoint_[DIMENSION];
     }
 
     // TODO: test if making the above a default case of the this hurts performance
@@ -305,17 +314,20 @@ public:
     inline void increment(MultiArrayIndex offset)
     {
         point_[DIMENSION] += offset;
+        offsetPoint_[DIMENSION] += offset;
     }
 
     template<int DIMENSION>
     inline void decrement(MultiArrayIndex offset)
     {
         point_[DIMENSION] -= offset;
+        offsetPoint_[DIMENSION] -= offset;
     }
 
     void restrictToSubarray(shape_type const & start, shape_type const & end)
     {
         point_ = shape_type();
+        offsetPoint_ = start;
         shape_ = end - start;
         scanOrderIndex_ = 0;
     }
@@ -360,17 +372,17 @@ public:
 
     const_reference operator*() const
     {
-        return point_;
+        return offsetPoint_;
     }
 
     const_pointer operator->() const
     {
-        return &point_;
+      return &offsetPoint_;
     }
 
     const_pointer ptr() const
     {
-        return &point_;
+	return &offsetPoint_;
     }
 
     unsigned int borderType() const
@@ -398,7 +410,7 @@ public:
         point_ = point;
     }
 
-    value_type point_, shape_;
+    value_type point_, shape_, offsetPoint_;
     MultiArrayIndex scanOrderIndex_;
 };
 
